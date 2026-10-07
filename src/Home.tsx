@@ -14,7 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { CHANNELS } from './config';
-import { Glow, Press, Ring, StatusPill, Toggle, mmss, tap } from './theme';
+import { Glow, Press, Ring, Toggle, mmss, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
 
@@ -174,6 +174,82 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
   );
 }
 
+function ConnectButton({
+  ready,
+  isDark,
+  onPress,
+}: {
+  ready: boolean;
+  isDark: boolean;
+  onPress: () => void;
+}) {
+  const pulse = useSharedValue(0);
+
+  useEffect(() => {
+    if (ready) {
+      pulse.value = 0;
+      pulse.value = withRepeat(
+        withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }),
+        -1,
+        false
+      );
+    } else {
+      pulse.value = withTiming(0, { duration: 200 });
+    }
+  }, [ready]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: ready ? 0.65 * (1 - pulse.value) : 0,
+    transform: [{ scale: 1 + pulse.value * 2.2 }],
+  }));
+
+  return (
+    <Press onPress={onPress}>
+      <View
+        style={[
+          s.connectBtn,
+          ready
+            ? {
+                backgroundColor: isDark ? 'rgba(6, 214, 160, 0.12)' : '#ECFDF5',
+                borderColor: isDark ? 'rgba(6, 214, 160, 0.4)' : '#A7F3D0',
+              }
+            : {
+                backgroundColor: isDark ? '#141C2E' : '#F1F5F9',
+                borderColor: isDark ? '#1F2C46' : '#E2E8F0',
+              },
+        ]}
+      >
+        {ready ? (
+          <View style={s.dotWrap}>
+            <Animated.View style={[s.dotRing, ringStyle]} />
+            <View style={s.dotCore} />
+          </View>
+        ) : (
+          <Ionicons name="bluetooth" size={14} color="#0084FF" />
+        )}
+        <Text
+          style={[
+            s.connectBtnText,
+            {
+              color: ready ? '#06D6A0' : isDark ? '#E2E8F0' : '#1E293B',
+              fontWeight: '600',
+            },
+          ]}
+        >
+          {ready ? 'Connected' : 'Connect'}
+        </Text>
+        {!ready && (
+          <Ionicons
+            name="chevron-forward"
+            size={13}
+            color={isDark ? '#64748B' : '#94A3B8'}
+          />
+        )}
+      </View>
+    </Press>
+  );
+}
+
 export default function Home() {
   const h = useHome();
   const colors = h.colors;
@@ -185,11 +261,6 @@ export default function Home() {
   const greetingIcon = hour < 12 ? 'sunny' : hour < 17 ? 'partly-sunny' : 'moon';
   const greetingColor = hour < 12 ? '#FF9500' : hour < 17 ? '#F59E0B' : '#8B5CF6';
 
-  const pill = h.bleActive
-    ? 'Bluetooth Active'
-    : h.brokerUp && h.deviceUp
-    ? 'Connected'
-    : 'Local Standby';
   const allOnActive = onCount === CHANNELS.length && CHANNELS.length > 0;
   const [bleModalOpen, setBleModalOpen] = useState(false);
 
@@ -205,26 +276,9 @@ export default function Home() {
           </View>
         </View>
         <View style={s.topActions}>
-          <Press
-            onPress={() => {
-              tap();
-              setBleModalOpen(true);
-            }}
-            style={[
-              s.bleIconBtn,
-              {
-                backgroundColor: isDark ? '#141C2E' : '#F1F5F9',
-                borderColor: isDark ? '#1F2C46' : '#E2E8F0',
-              },
-            ]}
-          >
-            <Ionicons name="bluetooth" size={17} color="#0084FF" />
-          </Press>
-
-          <StatusPill
-            label={pill}
-            good={h.ready}
-            colors={colors}
+          <ConnectButton
+            ready={h.ready}
+            isDark={isDark}
             onPress={() => {
               tap();
               setBleModalOpen(true);
@@ -402,13 +456,42 @@ const s = StyleSheet.create({
     gap: 8,
     paddingTop: 6,
   },
-  bleIconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
+  connectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  connectBtnText: {
+    fontSize: 13,
+    letterSpacing: -0.1,
+  },
+  dotWrap: {
+    width: 10,
+    height: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dotRing: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#06D6A0',
+  },
+  dotCore: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#06D6A0',
   },
   headerTitle: {
     fontSize: 42,
