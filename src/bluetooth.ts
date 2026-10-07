@@ -147,18 +147,57 @@ export async function checkBluetoothState(): Promise<BluetoothState> {
   }
 }
 
+function toBase64(str: string): string {
+  try {
+    return btoa(str);
+  } catch {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let output = '';
+    for (
+      let block = 0, charCode, i = 0, map = chars;
+      str.charAt(i | 0) || ((map = '='), i % 1);
+      output += map.charAt(63 & (block >> (8 - (i % 1) * 8)))
+    ) {
+      charCode = str.charCodeAt((i += 3 / 4));
+      block = (block << 8) | charCode;
+    }
+    return output;
+  }
+}
+
+function fromBase64(b64: string): string {
+  try {
+    return atob(b64);
+  } catch {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = b64.replace(/=+$/, '');
+    let output = '';
+    for (
+      let bc = 0, bs = 0, buffer, idx = 0;
+      (buffer = str.charAt(idx++));
+      ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4)
+        ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6))))
+        : 0
+    ) {
+      buffer = chars.indexOf(buffer);
+    }
+    return output;
+  }
+}
+
 export const LUMO_SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
 export const LUMO_CHAR_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
 let activeChar: any = null;
 let activeDevice: any = null;
+let activeNativeDevice: any = null;
 
 type BleListener = (connected: boolean, name?: string) => void;
 const bleListeners = new Set<BleListener>();
 
 export function addBleListener(fn: BleListener): () => void {
   bleListeners.add(fn);
-  fn(isBleConnected(), activeDevice?.name);
+  fn(isBleConnected(), activeDevice?.name || activeNativeDevice?.name || activeNativeDevice?.localName);
   return () => bleListeners.delete(fn);
 }
 
@@ -178,25 +217,47 @@ function notifyBleData(data: string) {
   bleDataListeners.forEach((fn) => fn(data));
 }
 
-/** Check if a real Bluetooth device is currently connected */
+/** Check if a real Bluetooth device is currently connected (Web or Native iOS/Android) */
 export function isBleConnected(): boolean {
-  return !!(activeChar || activeDevice?.gatt?.connected);
+  return !!(activeChar || activeDevice?.gatt?.connected || activeNativeDevice);
 }
 
-// Sequential write queue to prevent Chrome GATT collisions
+// Sequential write queue to prevent GATT collisions
 let bleWriteQueue: Promise<any> = Promise.resolve();
 
 /**
  * Send raw command (e.g. R1_ON, R1_OFF, R2_ON, R2_OFF) to ESP32 over BLE.
- * Uses writeValueWithoutResponse (Write Without Response / Write Command)
- * for sub-10ms instantaneous relay triggering!
+ * Supports both Web Bluetooth and Native Mobile iOS/Android (react-native-ble-plx).
  */
 export async function sendBleCommand(cmd: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     bleWriteQueue = bleWriteQueue
       .then(async () => {
         try {
-          // Lazily re-acquire characteristic if device is connected but char got lost
+          // ── 1. NATIVE MOBILE BLE (iOS / Android react-native-ble-plx) ──
+          if (activeNativeDevice) {
+            const b64 = toBase64(cmd);
+            try {
+              // Try write without response first for <15ms instant latency
+              await activeNativeDevice.writeCharacteristicWithoutResponseForService(
+                LUMO_SERVICE_UUID,
+                LUMO_CHAR_UUID,
+                b64
+              );
+            } catch {
+              // Fallback to write with response
+              await activeNativeDevice.writeCharacteristicWithResponseForService(
+                LUMO_SERVICE_UUID,
+                LUMO_CHAR_UUID,
+                b64
+              );
+            }
+            console.log('[Native BLE] Sent instant command:', cmd);
+            resolve(true);
+            return;
+          }
+
+          // ── 2. WEB BLUETOOTH (Chrome / Edge) ──
           if (!activeChar && activeDevice?.gatt?.connected) {
             try {
               const service = await activeDevice.gatt.getPrimaryService(LUMO_SERVICE_UUID);
@@ -208,7 +269,6 @@ export async function sendBleCommand(cmd: string): Promise<boolean> {
             const enc = new TextEncoder();
             const bytes = enc.encode(cmd);
 
-            // 1. FAST-PATH: writeValueWithoutResponse delivers packet in <10ms without round-trip ACK
             if (typeof activeChar.writeValueWithoutResponse === 'function') {
               await activeChar.writeValueWithoutResponse(bytes);
             } else if (typeof activeChar.writeValueWithResponse === 'function') {
@@ -232,6 +292,56 @@ export async function sendBleCommand(cmd: string): Promise<boolean> {
         resolve(false);
       });
   });
+}
+
+/**
+ * Connect to a native BLE device (iPhone iOS / Android)
+ */
+export async function connectNativeBleDevice(device: any): Promise<boolean> {
+  try {
+    console.log('[Native BLE] Connecting to device:', device?.id);
+    const connected = await device.connect({ timeout: 10000 });
+    console.log('[Native BLE] Discovering services...');
+    await connected.discoverAllServicesAndCharacteristics();
+    activeNativeDevice = connected;
+
+    connected.onDisconnected(() => {
+      console.log('[Native BLE] Device disconnected');
+      activeNativeDevice = null;
+      notifyBleState(false);
+    });
+
+    // Listen for state notifications from ESP32
+    try {
+      connected.monitorCharacteristicForService(
+        LUMO_SERVICE_UUID,
+        LUMO_CHAR_UUID,
+        (error: any, characteristic: any) => {
+          if (characteristic?.value) {
+            const decoded = fromBase64(characteristic.value);
+            console.log('[Native BLE] State notification:', decoded);
+            notifyBleData(decoded);
+          }
+        }
+      );
+    } catch (monErr) {
+      console.warn('[Native BLE] Monitor note:', monErr);
+    }
+
+    const devName = device.name || device.localName || 'Lumo-ESP32';
+    notifyBleState(true, devName);
+
+    // Fetch initial hardware status
+    setTimeout(() => {
+      sendBleCommand('STATUS').catch(() => {});
+    }, 200);
+
+    return true;
+  } catch (err) {
+    console.warn('[Native BLE] Connect error:', err);
+    activeNativeDevice = null;
+    return false;
+  }
 }
 
 /**
@@ -340,8 +450,28 @@ export function scanNativeDevices(
         return;
       }
 
-      const state = await manager.state();
-      if (state !== 'PoweredOn') {
+      let isPowered = (await manager.state()) === 'PoweredOn';
+      if (!isPowered) {
+        isPowered = await new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => {
+            sub?.remove();
+            resolve(false);
+          }, 3000);
+          const sub = manager.onStateChange((s) => {
+            if (s === 'PoweredOn') {
+              clearTimeout(timeout);
+              sub.remove();
+              resolve(true);
+            } else if (s === 'PoweredOff' || s === 'Unauthorized') {
+              clearTimeout(timeout);
+              sub.remove();
+              resolve(false);
+            }
+          }, true);
+        });
+      }
+
+      if (!isPowered) {
         onError('Bluetooth is turned off. Please turn on Bluetooth in device settings.');
         return;
       }
@@ -352,9 +482,15 @@ export function scanNativeDevices(
           return;
         }
         if (device && device.id && !discoveredIds.has(device.id)) {
-          discoveredIds.add(device.id);
-          const name = device.name || device.localName;
+          const name =
+            device.name ||
+            device.localName ||
+            (device.serviceUUIDs?.some((u) => u.toLowerCase() === LUMO_SERVICE_UUID.toLowerCase())
+              ? 'Lumo-ESP32'
+              : null);
+
           if (name) {
+            discoveredIds.add(device.id);
             onDeviceFound({
               id: device.id,
               name,
@@ -378,13 +514,32 @@ export function scanNativeDevices(
 }
 
 /** Disconnect an active Bluetooth GATT connection */
-export function disconnectBluetoothDevice(device?: any) {
+export async function disconnectBluetoothDevice(device?: any) {
   try {
-    if (device?.gatt?.connected) {
-      device.gatt.disconnect();
-    } else if (device?.cancelConnection) {
-      device.cancelConnection();
+    if (activeNativeDevice) {
+      try {
+        await activeNativeDevice.cancelConnection();
+      } catch {}
+      activeNativeDevice = null;
     }
+    if (device?.cancelConnection) {
+      try {
+        await device.cancelConnection();
+      } catch {}
+    }
+    if (device?.gatt?.connected) {
+      try {
+        device.gatt.disconnect();
+      } catch {}
+    }
+    if (activeDevice?.gatt?.connected) {
+      try {
+        activeDevice.gatt.disconnect();
+      } catch {}
+    }
+    activeChar = null;
+    activeDevice = null;
+    notifyBleState(false);
   } catch (e) {
     console.warn('Disconnect error:', e);
   }

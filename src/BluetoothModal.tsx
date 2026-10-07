@@ -27,6 +27,7 @@ import { useHome } from './useHome';
 import {
   BluetoothDeviceInfo,
   checkBluetoothState,
+  connectNativeBleDevice,
   disconnectBluetoothDevice,
   getBleManager,
   isWebBluetoothSupported,
@@ -197,15 +198,17 @@ export default function BluetoothModal({
     async (device: BluetoothDeviceInfo) => {
       tap();
       setIsConnecting(true);
+      setErrorMsg(null);
       try {
-        if (device.rawDevice?.connect) {
-          await device.rawDevice.connect();
-          await device.rawDevice.discoverAllServicesAndCharacteristics?.();
+        const success = await connectNativeBleDevice(device.rawDevice);
+        if (success) {
+          setPairedDevice({ ...device, connected: true });
+          setPhase('CONNECTED');
+          notify('success');
+          h.reconnect();
+        } else {
+          setErrorMsg('Failed to link Lumo BLE service. Ensure ESP32 is powered and in range.');
         }
-        setPairedDevice({ ...device, connected: true });
-        setPhase('CONNECTED');
-        notify('success');
-        h.reconnect();
       } catch (e: any) {
         setErrorMsg(e?.message || 'Failed to connect to device');
       } finally {
@@ -216,11 +219,9 @@ export default function BluetoothModal({
   );
 
   // ── Handle Disconnect ──
-  const handleDisconnect = useCallback(() => {
+  const handleDisconnect = useCallback(async () => {
     tap();
-    if (pairedDevice?.rawDevice) {
-      disconnectBluetoothDevice(pairedDevice.rawDevice);
-    }
+    await disconnectBluetoothDevice(pairedDevice?.rawDevice);
     setPairedDevice(null);
     setDiscoveredDevices([]);
     setPhase('IDLE');
