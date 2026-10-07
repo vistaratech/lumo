@@ -17,7 +17,6 @@ import { Glow, Press, Ring, Toggle, mmss, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
 import WifiModal from './WifiModal';
-import LumoBot from './LumoBot';
 
 const sinceLabel = (t: number | null, now: number) => {
   if (!t) return 'Active';
@@ -392,8 +391,6 @@ export default function Home() {
         </View>
       </Animated.View>
 
-      {/* 3D Interactive Mascot Companion */}
-      <LumoBot />
 
       {/* Hero Glow Card */}
       <Animated.View entering={FadeInDown.delay(100).duration(500)} style={s.heroCardWrapper}>
