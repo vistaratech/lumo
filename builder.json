@@ -1,0 +1,14 @@
+{
+  "project": "Lumo",
+  "platform": "ios",
+  "github": {
+    "owner": "vistaratech",
+    "repo": "lumo"
+  },
+  "ios": {
+    "path": "ios"
+  },
+  "reactNative": {
+    "expo": true
+  }
+}
