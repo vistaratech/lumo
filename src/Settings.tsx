@@ -13,6 +13,7 @@ import { CHANNELS } from './config';
 import { Header, Press, StatusPill, ThemeColors, ThemeMode, Toggle, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
+import WifiModal from './WifiModal';
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: any; color: string }[] = [
   { mode: 'dark', label: 'Dark', icon: 'moon', color: '#8B5CF6' },
@@ -271,6 +272,7 @@ export default function Settings() {
   const h = useHome();
   const colors = h.colors;
   const [bleModalOpen, setBleModalOpen] = useState(false);
+  const [wifiModalOpen, setWifiModalOpen] = useState(false);
 
   return (
     <ScrollView
@@ -470,6 +472,31 @@ export default function Settings() {
           dimColor={colors.dim}
         />
 
+        <Press
+          onPress={() => {
+            tap();
+            setWifiModalOpen(true);
+          }}
+        >
+          <StatusRow
+            icon="wifi"
+            iconColor="#06D6A0"
+            label="Device Wi-Fi Setup"
+            value={
+              h.wifiStatus === 'connected'
+                ? h.wifiSsid || 'Connected'
+                : h.wifiStatus === 'connecting'
+                ? 'Connecting…'
+                : 'Configure'
+            }
+            valueColor={h.wifiStatus === 'connected' ? colors.ok : '#06D6A0'}
+            cardBg={colors.card}
+            lineColor={colors.line}
+            textColor={colors.text}
+            dimColor={colors.dim}
+          />
+        </Press>
+
         <StatusRow
           icon="hardware-chip-outline"
           iconColor="#06D6A0"
@@ -497,6 +524,9 @@ export default function Settings() {
 
       {/* Bluetooth Discovery Modal */}
       <BluetoothModal visible={bleModalOpen} onClose={() => setBleModalOpen(false)} />
+
+      {/* Device Wi-Fi Provisioning Modal */}
+      <WifiModal visible={wifiModalOpen} onClose={() => setWifiModalOpen(false)} />
     </ScrollView>
   );
 }

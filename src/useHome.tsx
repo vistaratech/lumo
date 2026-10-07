@@ -26,6 +26,9 @@ type Ctx = {
   isDark: boolean;
   colors: ThemeColors;
   C: ThemeColors;
+  wifiStatus: 'connected' | 'connecting' | 'failed' | 'disconnected' | 'unknown';
+  wifiSsid: string | null;
+  wifiIp: string | null;
   setName: (id: number, name: string) => void;
   setHaptics: (v: boolean) => void;
   setThemeMode: (mode: ThemeMode) => void;
@@ -34,6 +37,9 @@ type Ctx = {
   startTimer: (id: number, minutes: number) => void;
   cancelTimer: (id: number) => void;
   reconnect: () => void;
+  configureWifi: (ssid: string, pass: string) => Promise<boolean>;
+  clearWifi: () => Promise<boolean>;
+  refreshWifi: () => void;
 };
 
 const HomeCtx = createContext<Ctx>({} as Ctx);
@@ -86,6 +92,19 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
 
   const [bleActive, setBleActive] = useState(isBleConnected());
   const [bleDeviceName, setBleDeviceName] = useState<string | null>(null);
+
+  const [wifiStatus, setWifiStatus] = useState<'connected' | 'connecting' | 'failed' | 'disconnected' | 'unknown'>('unknown');
+  const [wifiSsid, setWifiSsid] = useState<string | null>(null);
+  const [wifiIp, setWifiIp] = useState<string | null>(null);
+
+  /* Load cached Wi-Fi SSID from storage */
+  useEffect(() => {
+    AsyncStorage.getItem('lumo.wifi_ssid')
+      .then((s) => {
+        if (s) setWifiSsid(s);
+      })
+      .catch(() => {});
+  }, []);
 
   /* Synchronize timers from storage (handles app restart or returning from background) */
   const syncTimersFromStorage = async () => {
@@ -151,6 +170,12 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     const unsubState = addBleListener((connected, name) => {
       setBleActive(connected);
       if (name) setBleDeviceName(name);
+      if (connected) {
+        setTimeout(() => {
+          sendBleCommand('STATUS').catch(() => {});
+          sendBleCommand('GET_WIFI').catch(() => {});
+        }, 350);
+      }
     });
 
     const unsubData = addBleDataListener((msg) => {
@@ -168,6 +193,29 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         onRef.current[2] = val;
         setOn((s) => ({ ...s, 2: val }));
         setSince((s) => ({ ...s, 2: val ? s[2] ?? Date.now() : null }));
+      }
+
+      // Wi-Fi provisioning state parsing from ESP32
+      if (msg.startsWith('WIFI_STATE:CONNECTED')) {
+        const parts = msg.split(':');
+        const ip = parts[2] || '';
+        const ssid = parts[3] || wifiSsid || '';
+        setWifiStatus('connected');
+        if (ip) setWifiIp(ip);
+        if (ssid) {
+          setWifiSsid(ssid);
+          AsyncStorage.setItem('lumo.wifi_ssid', ssid).catch(() => {});
+        }
+      } else if (msg.startsWith('WIFI_STATE:CONNECTING')) {
+        const parts = msg.split(':');
+        const ssid = parts[2] || '';
+        setWifiStatus('connecting');
+        if (ssid) setWifiSsid(ssid);
+      } else if (msg.startsWith('WIFI_STATE:FAILED')) {
+        setWifiStatus('failed');
+      } else if (msg.startsWith('WIFI_STATE:DISCONNECTED') || msg.startsWith('WIFI_STATE:CLEARED')) {
+        setWifiStatus('disconnected');
+        setWifiIp(null);
       }
     });
 
@@ -314,16 +362,23 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    c.connect({
+    const connectOptions: any = {
       useSSL: true,
-      userName: BROKER.user,
-      password: BROKER.pass,
       keepAliveInterval: 30,
       timeout: 10,
       reconnect: true,
       onSuccess: onConnected,
-      onFailure: () => setBrokerUp(false),
-    });
+      onFailure: (err: any) => {
+        console.warn('[MQTT] Connection failed:', err);
+        setBrokerUp(false);
+      },
+    };
+    if (BROKER.user) {
+      connectOptions.userName = BROKER.user;
+      connectOptions.password = BROKER.pass;
+    }
+
+    c.connect(connectOptions);
     return () => {
       try {
         c.disconnect();
@@ -338,6 +393,25 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     msg.qos = 1;
     client.current.send(msg);
     return true;
+  };
+
+  const configureWifi = async (ssid: string, pass: string): Promise<boolean> => {
+    setWifiStatus('connecting');
+    setWifiSsid(ssid);
+    AsyncStorage.setItem('lumo.wifi_ssid', ssid).catch(() => {});
+    return sendBleCommand(`SET_WIFI:${ssid}:${pass}`);
+  };
+
+  const clearWifi = async (): Promise<boolean> => {
+    setWifiStatus('disconnected');
+    setWifiIp(null);
+    setWifiSsid(null);
+    AsyncStorage.removeItem('lumo.wifi_ssid').catch(() => {});
+    return sendBleCommand('CLEAR_WIFI');
+  };
+
+  const refreshWifi = () => {
+    sendBleCommand('GET_WIFI').catch(() => {});
   };
 
   const send = (id: number, value: boolean) => {
@@ -402,6 +476,9 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     isDark,
     colors,
     C: colors,
+    wifiStatus,
+    wifiSsid,
+    wifiIp,
     setName,
     setHaptics,
     setThemeMode,
@@ -429,6 +506,9 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       setBrokerUp(false);
       setDeviceUp(false);
     },
+    configureWifi,
+    clearWifi,
+    refreshWifi,
   };
 
   return <HomeCtx.Provider value={value}>{children}</HomeCtx.Provider>;

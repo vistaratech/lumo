@@ -1,15 +1,18 @@
 /**
  * ============================================================================
- * Lumo Smart Home Hub — Dual Bluetooth BLE + WiFi/MQTT Relay Controller
+ * Lumo Smart Home Hub — Dual Bluetooth BLE + Wi-Fi/MQTT Relay Controller
  * Hardware: ESP32-C3 Super Mini + 2-Channel Relay Module
  * 
  * Features:
  *   1. Bluetooth Low Energy (BLE) with name "Lumo-ESP32"
  *      - Direct local control from Chrome browser (Web Bluetooth) or Phone App
+ *      - In-app Wi-Fi Provisioning (no coding needed to configure home Wi-Fi!)
  *      - UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
  *      - Characteristic: beb5483e-36e1-4688-b7f5-ea07361b26a8
- *   2. WiFi + MQTT (HiveMQ Cloud) for worldwide cloud access
- *      - Non-blocking (Bluetooth works even if WiFi is not connected)
+ *   2. Wi-Fi + Cloud MQTT (broker.emqx.io / HiveMQ Cloud)
+ *      - Worldwide control from SIM Mobile Data (4G/5G) or any remote Wi-Fi
+ *      - Wi-Fi credentials stored permanently in Flash memory (NVS Preferences)
+ *      - Non-blocking (Bluetooth works even if Wi-Fi is disconnected)
  *   3. On-board hardware countdown timers that finish on the chip
  *
  * Pinout:
@@ -27,22 +30,12 @@
  */
 
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
+#include <Preferences.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-
-// ── Wi-Fi & MQTT Credentials (Optional for Cloud) ─────────────────────────
-// Leave as empty strings ("") if you only want to use Bluetooth!
-const char* WIFI_SSID = "YOUR_WIFI";
-const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
-
-const char* MQTT_HOST = "YOUR-CLUSTER.s1.eu.hivemq.cloud";
-const uint16_t MQTT_PORT = 8883;
-const char* MQTT_USER = "YOUR_USER";
-const char* MQTT_PASS = "YOUR_PASS";
 
 // ── Hardware Pins ─────────────────────────────────────────────────────────
 const int RELAY_PIN[2] = {2, 3};   // IN1 -> GPIO2, IN2 -> GPIO3
@@ -50,10 +43,14 @@ const int LED_PIN      = 8;        // ESP32-C3 Super Mini on-board LED
 const bool ACTIVE_LOW  = true;     // Most relay boards: LOW = ON, HIGH = OFF
 const bool LED_ACTIVE_LOW = true;  // ESP32-C3 Super Mini LED is active LOW
 
-// ── BLE UUIDs (Must match the Web / Mobile App) ───────────────────────────
+// ── BLE UUIDs (Must match Mobile / Web App) ───────────────────────────────
 #define BLE_DEVICE_NAME     "Lumo-ESP32"
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+// ── Default Cloud MQTT Broker (Free, fast public cluster with WSS support) 
+const char* DEFAULT_MQTT_HOST = "broker.emqx.io";
+const uint16_t DEFAULT_MQTT_PORT = 1883;
 
 // ── MQTT Topics ───────────────────────────────────────────────────────────
 const char* TOPIC_STATUS        = "home/esp32/status";
@@ -68,16 +65,23 @@ bool timerOn[2] = {false, false};
 unsigned long offAt[2] = {0, 0};
 unsigned long lastTick = 0;
 unsigned long lastWifiCheck = 0;
+unsigned long wifiConnectStart = 0;
+bool isConnectingWifi = false;
 
-// BLE globals
+// NVS Persistent Storage
+Preferences prefs;
+String savedSsid = "";
+String savedPass = "";
+
+// BLE Globals
 BLEServer* pServer = nullptr;
 BLECharacteristic* pCharacteristic = nullptr;
 bool bleClientConnected = false;
 bool oldBleClientConnected = false;
 
-// Network globals
-WiFiClientSecure net;
-PubSubClient mqtt(net);
+// Network Globals
+WiFiClient netClient;
+PubSubClient mqtt(netClient);
 
 // ── Helper: Apply Relay Physical Output ───────────────────────────────────
 void applyRelay(int i) {
@@ -85,9 +89,31 @@ void applyRelay(int i) {
   digitalWrite(RELAY_PIN[i], level ? HIGH : LOW);
 }
 
-// ── Helper: Format Status String for BLE ──────────────────────────────────
+// ── Helper: Format Relay Status String for BLE ────────────────────────────
 String getStatusString() {
   return "R1:" + String(relayOn[0] ? "1" : "0") + ",R2:" + String(relayOn[1] ? "1" : "0");
+}
+
+// ── Helper: Format Wi-Fi Status String for BLE ────────────────────────────
+String getWifiStatusString() {
+  if (WiFi.status() == WL_CONNECTED) {
+    return "WIFI_STATE:CONNECTED:" + WiFi.localIP().toString() + ":" + savedSsid;
+  } else if (isConnectingWifi) {
+    return "WIFI_STATE:CONNECTING:" + savedSsid;
+  } else if (savedSsid.length() > 0) {
+    return "WIFI_STATE:DISCONNECTED:" + savedSsid;
+  } else {
+    return "WIFI_STATE:DISCONNECTED";
+  }
+}
+
+// ── Helper: Notify BLE Client ─────────────────────────────────────────────
+void notifyBle(String msg) {
+  if (pCharacteristic && bleClientConnected) {
+    pCharacteristic->setValue(msg.c_str());
+    pCharacteristic->notify();
+    Serial.println("[BLE] Notified: " + msg);
+  }
 }
 
 // ── Helper: Publish State over BLE and MQTT ───────────────────────────────
@@ -98,12 +124,7 @@ void publishState(int i) {
   }
 
   // 2. BLE notify
-  if (pCharacteristic && bleClientConnected) {
-    String status = getStatusString();
-    pCharacteristic->setValue(status.c_str());
-    pCharacteristic->notify();
-    Serial.println("[BLE] Notified state: " + status);
-  }
+  notifyBle(getStatusString());
 }
 
 // ── Helper: Publish Timer Countdown ───────────────────────────────────────
@@ -127,12 +148,61 @@ void cancelTimer(int i) {
   publishTimer(i);
 }
 
+// ── Start Connecting to Wi-Fi ─────────────────────────────────────────────
+void startWifiConnection(String ssid, String pass) {
+  savedSsid = ssid;
+  savedPass = pass;
+  isConnectingWifi = true;
+  wifiConnectStart = millis();
+
+  WiFi.disconnect();
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(savedSsid.c_str(), savedPass.c_str());
+  Serial.println("[WiFi] Connecting to: " + savedSsid);
+  notifyBle("WIFI_STATE:CONNECTING:" + savedSsid);
+}
+
 // ── Central Command Handler (Called by BLE and MQTT) ──────────────────────
-void processCommand(String cmd) {
-  cmd.trim();
+void processCommand(String rawCmd) {
+  rawCmd.trim();
+  String cmd = rawCmd;
   cmd.toUpperCase();
 
-  // Fast Hardware Execution: applyRelay is executed immediately
+  // ── Wi-Fi Configuration Commands ──
+  if (rawCmd.startsWith("SET_WIFI:") || rawCmd.startsWith("set_wifi:")) {
+    int firstColon = rawCmd.indexOf(':');
+    int secondColon = rawCmd.indexOf(':', firstColon + 1);
+    if (firstColon != -1 && secondColon != -1) {
+      String newSsid = rawCmd.substring(firstColon + 1, secondColon);
+      String newPass = rawCmd.substring(secondColon + 1);
+      
+      // Save permanently in NVS Flash
+      prefs.putString("ssid", newSsid);
+      prefs.putString("pass", newPass);
+      Serial.println("[WiFi] Saved new credentials in Flash: " + newSsid);
+      
+      startWifiConnection(newSsid, newPass);
+    }
+    return;
+  }
+  else if (cmd == "GET_WIFI") {
+    notifyBle(getWifiStatusString());
+    return;
+  }
+  else if (cmd == "CLEAR_WIFI") {
+    prefs.remove("ssid");
+    prefs.remove("pass");
+    savedSsid = "";
+    savedPass = "";
+    isConnectingWifi = false;
+    WiFi.disconnect(true);
+    Serial.println("[WiFi] Credentials cleared from Flash");
+    notifyBle("WIFI_STATE:CLEARED");
+    return;
+  }
+
+  // ── Relay Control Commands ──
+  // Relay 1 Commands
   if (cmd == "R1_ON" || cmd == "1:ON" || cmd == "RELAY1:ON") {
     relayOn[0] = true;
     applyRelay(0);
@@ -184,11 +254,7 @@ void processCommand(String cmd) {
   }
   // Status Query
   else if (cmd == "STATUS" || cmd == "GET") {
-    if (pCharacteristic && bleClientConnected) {
-      String status = getStatusString();
-      pCharacteristic->setValue(status.c_str());
-      pCharacteristic->notify();
-    }
+    notifyBle(getStatusString());
   }
   // Timers: e.g. "TIMER:1:15" (Relay 1 for 15 mins)
   else if (cmd.startsWith("TIMER:")) {
@@ -221,6 +287,12 @@ class ServerCallbacks : public BLEServerCallbacks {
     bleClientConnected = true;
     digitalWrite(LED_PIN, LED_ACTIVE_LOW ? LOW : HIGH); // Turn LED ON
     Serial.println("[BLE] Client connected!");
+    
+    // Send initial status and Wi-Fi state immediately upon connect
+    delay(100);
+    notifyBle(getStatusString());
+    delay(100);
+    notifyBle(getWifiStatusString());
   }
 
   void onDisconnect(BLEServer* pServer) override {
@@ -250,7 +322,6 @@ void setupBLE() {
 
   BLEService* pService = pServer->createService(SERVICE_UUID);
 
-  // Added PROPERTY_WRITE_NR for instantaneous write-without-response from Web Bluetooth
   pCharacteristic = pService->createCharacteristic(
     CHARACTERISTIC_UUID,
     BLECharacteristic::PROPERTY_READ     |
@@ -262,13 +333,11 @@ void setupBLE() {
 
   pCharacteristic->addDescriptor(new BLE2902());
   pCharacteristic->setCallbacks(new CharacteristicCallbacks());
-
-  // Set initial value
   pCharacteristic->setValue(getStatusString().c_str());
 
   pService->start();
 
-  // Start advertising with fast connection interval preference
+  // Fast advertising profile
   BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
@@ -307,38 +376,45 @@ void onMqttMessage(char* topic, byte* payload, unsigned int len) {
   }
 }
 
-// ── Non-Blocking Wi-Fi & MQTT Helpers ─────────────────────────────────────
+// ── Non-Blocking Wi-Fi & MQTT Loop ────────────────────────────────────────
 void checkWifiAndMqtt() {
-  // If Wi-Fi credentials are not set, skip network entirely
-  if (String(WIFI_SSID) == "YOUR_WIFI" || String(WIFI_SSID).length() == 0) {
-    return;
-  }
+  // If no saved Wi-Fi, do nothing
+  if (savedSsid.length() == 0) return;
 
-  // Check WiFi connection
-  if (WiFi.status() != WL_CONNECTED) {
-    if (millis() - lastWifiCheck > 15000) {
+  // 1. Wi-Fi Status Check
+  if (WiFi.status() == WL_CONNECTED) {
+    if (isConnectingWifi) {
+      isConnectingWifi = false;
+      Serial.println("[WiFi] Connected! IP: " + WiFi.localIP().toString());
+      notifyBle("WIFI_STATE:CONNECTED:" + WiFi.localIP().toString() + ":" + savedSsid);
+    }
+  } else {
+    // If we were connecting and timed out after 18 seconds
+    if (isConnectingWifi && millis() - wifiConnectStart > 18000) {
+      isConnectingWifi = false;
+      Serial.println("[WiFi] Connection failed / timed out");
+      notifyBle("WIFI_STATE:FAILED");
+    }
+
+    // Periodic Wi-Fi reconnect attempt every 20 seconds
+    if (!isConnectingWifi && millis() - lastWifiCheck > 20000) {
       lastWifiCheck = millis();
-      Serial.println("[WiFi] Connecting to: " + String(WIFI_SSID));
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(WIFI_SSID, WIFI_PASS);
-      WiFi.setTxPower(WIFI_POWER_8_5dBm);
+      Serial.println("[WiFi] Re-attempting Wi-Fi connection...");
+      WiFi.begin(savedSsid.c_str(), savedPass.c_str());
     }
     return;
   }
 
-  // Check MQTT
-  if (String(MQTT_HOST) == "YOUR-CLUSTER.s1.eu.hivemq.cloud" || String(MQTT_HOST).length() == 0) {
-    return;
-  }
-
+  // 2. Cloud MQTT Client Connection
   if (!mqtt.connected()) {
     static unsigned long lastMqttAttempt = 0;
     if (millis() - lastMqttAttempt > 6000) {
       lastMqttAttempt = millis();
-      Serial.println("[MQTT] Connecting to broker...");
-      String id = "esp32-lumo-" + String((uint32_t)ESP.getEfuseMac(), HEX);
-      if (mqtt.connect(id.c_str(), MQTT_USER, MQTT_PASS, TOPIC_STATUS, 1, true, "offline")) {
-        Serial.println("[MQTT] Connected to HiveMQ Cloud!");
+      Serial.println("[MQTT] Connecting to cloud broker: " + String(DEFAULT_MQTT_HOST));
+      String id = "lumo-esp32-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+
+      if (mqtt.connect(id.c_str(), TOPIC_STATUS, 1, true, "offline")) {
+        Serial.println("[MQTT] Connected to Cloud Broker successfully!");
         mqtt.publish(TOPIC_STATUS, "online", true);
         for (int i = 0; i < 2; i++) {
           mqtt.subscribe(TOPIC_SET[i], 1);
@@ -376,23 +452,35 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LED_ACTIVE_LOW ? HIGH : LOW); // LED OFF initially
 
+  // Initialize Flash Preferences (NVS storage for Wi-Fi)
+  prefs.begin("lumo_cfg", false);
+  savedSsid = prefs.getString("ssid", "");
+  savedPass = prefs.getString("pass", "");
+
   // Initialize Bluetooth Low Energy immediately
   setupBLE();
 
-  // Setup Network client (Insecure for TLS testing)
-  net.setInsecure();
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
+  // Setup MQTT Client
+  mqtt.setServer(DEFAULT_MQTT_HOST, DEFAULT_MQTT_PORT);
   mqtt.setCallback(onMqttMessage);
+
+  // Start Wi-Fi if saved credentials exist
+  if (savedSsid.length() > 0) {
+    Serial.println("[WiFi] Found saved network in Flash: " + savedSsid);
+    startWifiConnection(savedSsid, savedPass);
+  } else {
+    Serial.println("[WiFi] No saved Wi-Fi found. Ready for in-app configuration over BLE.");
+  }
 
   Serial.println("[LUMO] Setup complete! Device is ready.");
 }
 
-// ── Loop ──────────────────────────────────────────────────────────────────
+// ── Main Loop ─────────────────────────────────────────────────────────────
 void loop() {
   // 1. BLE Advertising restart on disconnect
   if (!bleClientConnected && oldBleClientConnected) {
-    delay(500); // give the bluetooth stack the chance to get things ready
-    pServer->startAdvertising(); // restart advertising
+    delay(500);
+    pServer->startAdvertising();
     Serial.println("[BLE] Restarted advertising");
     oldBleClientConnected = bleClientConnected;
   }
@@ -420,7 +508,7 @@ void loop() {
     }
   }
 
-  // 4. Non-blocking Wi-Fi & MQTT handling
+  // 4. Non-blocking Wi-Fi & Cloud MQTT handling
   checkWifiAndMqtt();
 
   delay(1);

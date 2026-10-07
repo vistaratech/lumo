@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Press, notify, tap } from './theme';
 import { useHome } from './useHome';
+import WifiModal from './WifiModal';
 import {
   BluetoothDeviceInfo,
   checkBluetoothState,
@@ -57,6 +58,7 @@ export default function BluetoothModal({
   const [pairedDevice, setPairedDevice] = useState<BluetoothDeviceInfo | null>(null);
   const [discoveredDevices, setDiscoveredDevices] = useState<BluetoothDeviceInfo[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [wifiModalOpen, setWifiModalOpen] = useState(false);
 
   const nativeScanCleanupRef = useRef<(() => void) | null>(null);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -383,6 +385,14 @@ export default function BluetoothModal({
 
               <View style={s.actions}>
                 <Press
+                  onPress={() => setWifiModalOpen(true)}
+                  style={[s.primaryBtn, { backgroundColor: '#0084FF', borderColor: '#0084FF' }]}
+                >
+                  <Ionicons name="wifi" size={16} color="#FFF" />
+                  <Text style={s.primaryBtnText}>Setup Device Wi-Fi</Text>
+                </Press>
+
+                <Press
                   onPress={onClose}
                   style={[s.primaryBtn, { backgroundColor: '#06D6A0', borderColor: '#06D6A0' }]}
                 >
@@ -532,6 +542,9 @@ export default function BluetoothModal({
           </View>
         </Animated.View>
       </View>
+
+      {/* Embedded Wi-Fi Setup Modal */}
+      <WifiModal visible={wifiModalOpen} onClose={() => setWifiModalOpen(false)} />
     </Modal>
   );
 }

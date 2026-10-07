@@ -1,9 +1,9 @@
-// Fill these in (same broker values as the ESP32 firmware)
+// Cloud MQTT Broker for worldwide SIM / Wi-Fi remote access
 export const BROKER = {
-  host: 'YOUR-CLUSTER.s1.eu.hivemq.cloud',
-  port: 8884, // secure WebSocket port on HiveMQ Cloud
-  user: 'YOUR_USER',
-  pass: 'YOUR_PASS',
+  host: 'broker.emqx.io',
+  port: 8084, // Secure WebSocket port (WSS / TLS)
+  user: '',   // Empty for public cluster, or set your HiveMQ user
+  pass: '',   // Empty for public cluster, or set your HiveMQ pass
 };
 
 export const BASE = 'home/esp32';
