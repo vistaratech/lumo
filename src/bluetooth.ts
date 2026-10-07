@@ -302,6 +302,13 @@ export async function connectNativeBleDevice(device: any): Promise<boolean> {
   try {
     console.log('[Native BLE] Connecting to device:', device?.id);
     const connected = await device.connect({ timeout: 10000 });
+    try {
+      if (typeof connected.requestMTU === 'function') {
+        await connected.requestMTU(512);
+      }
+    } catch (mtuErr) {
+      console.log('[Native BLE] MTU request note:', mtuErr);
+    }
     console.log('[Native BLE] Discovering services...');
     await connected.discoverAllServicesAndCharacteristics();
     activeNativeDevice = connected;

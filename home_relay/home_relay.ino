@@ -6,9 +6,10 @@
  * Features:
  *   1. Bluetooth Low Energy (BLE) with name "Lumo-ESP32"
  *      - Direct local control from Chrome browser (Web Bluetooth) or Phone App
- *      - In-app Wi-Fi Provisioning (no coding needed to configure home Wi-Fi!)
+ *      - In-app Non-Blocking Wi-Fi Provisioning (scans & connects nearby 2.4GHz)
  *      - UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
  *      - Characteristic: beb5483e-36e1-4688-b7f5-ea07361b26a8
+ *      - Negotiated 517-byte MTU for fast, complete network packet transfer
  *   2. Wi-Fi + Cloud MQTT (broker.emqx.io / HiveMQ Cloud)
  *      - Worldwide control from SIM Mobile Data (4G/5G) or any remote Wi-Fi
  *      - Wi-Fi credentials stored permanently in Flash memory (NVS Preferences)
@@ -67,6 +68,12 @@ unsigned long lastTick = 0;
 unsigned long lastWifiCheck = 0;
 unsigned long wifiConnectStart = 0;
 bool isConnectingWifi = false;
+bool wifiWasConnected = false;
+
+// Async Wi-Fi Scanning Flags (Non-blocking so BLE never drops)
+bool scanWifiRequested = false;
+bool isScanningWifi = false;
+unsigned long scanWifiStart = 0;
 
 // NVS Persistent Storage
 Preferences prefs;
@@ -153,60 +160,109 @@ void startWifiConnection(String ssid, String pass) {
   savedSsid = ssid;
   savedPass = pass;
   isConnectingWifi = true;
+  wifiWasConnected = false;
   wifiConnectStart = millis();
 
   WiFi.disconnect();
+  delay(60);
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(savedSsid.c_str(), savedPass.c_str());
   Serial.println("[WiFi] Connecting to: " + savedSsid);
   notifyBle("WIFI_STATE:CONNECTING:" + savedSsid);
 }
 
-// ── Perform Wi-Fi Scan for Nearby 2.4 GHz Networks ────────────────────────
-void performWifiScan() {
-  Serial.println("[WiFi] Scanning nearby 2.4 GHz networks...");
+// ── Non-Blocking Wi-Fi Scan Handler (Called in loop()) ────────────────────
+void handleWifiScan() {
+  // 1. Start scan if requested
+  if (scanWifiRequested) {
+    scanWifiRequested = false;
 
-  WiFi.mode(WIFI_STA);
-  int n = WiFi.scanNetworks(false, false);
+    if (isScanningWifi) return; // Already scanning
 
-  if (n <= 0) {
-    Serial.println("[WiFi] No networks found");
-    notifyBle("WIFI_SCAN_EMPTY");
-    WiFi.scanDelete();
-    return;
+    // Temporarily disconnect pending Wi-Fi connection attempt so channel scan succeeds
+    if (isConnectingWifi) {
+      WiFi.disconnect();
+      isConnectingWifi = false;
+    }
+
+    WiFi.mode(WIFI_STA);
+    WiFi.scanDelete(); // Free previous scan buffers
+
+    Serial.println("[WiFi] Starting non-blocking 2.4 GHz scan...");
+    int16_t res = WiFi.scanNetworks(true /* async */, false /* don't show hidden */);
+    if (res == WIFI_SCAN_RUNNING) {
+      isScanningWifi = true;
+      scanWifiStart = millis();
+    } else {
+      Serial.printf("[WiFi] Scan start error: %d\n", res);
+      notifyBle("WIFI_SCAN_EMPTY");
+    }
   }
 
-  Serial.println("[WiFi] Scan found " + String(n) + " networks");
+  // 2. Poll for async scan results
+  if (isScanningWifi) {
+    int16_t n = WiFi.scanComplete();
 
-  String reported[25];
-  int reportedCount = 0;
+    if (n >= 0) {
+      isScanningWifi = false;
+      Serial.printf("[WiFi] Scan complete! Found %d networks\n", n);
 
-  for (int i = 0; i < n && reportedCount < 20; i++) {
-    String netSsid = WiFi.SSID(i);
-    netSsid.trim();
-    if (netSsid.length() == 0) continue;
+      if (n == 0) {
+        notifyBle("WIFI_SCAN_EMPTY");
+      } else {
+        String reported[25];
+        int reportedCount = 0;
 
-    bool alreadyReported = false;
-    for (int j = 0; j < reportedCount; j++) {
-      if (reported[j] == netSsid) {
-        alreadyReported = true;
-        break;
+        for (int i = 0; i < n && reportedCount < 20; i++) {
+          String netSsid = WiFi.SSID(i);
+          netSsid.trim();
+          if (netSsid.length() == 0) continue;
+
+          bool alreadyReported = false;
+          for (int j = 0; j < reportedCount; j++) {
+            if (reported[j] == netSsid) {
+              alreadyReported = true;
+              break;
+            }
+          }
+          if (alreadyReported) continue;
+
+          reported[reportedCount++] = netSsid;
+          int rssi = WiFi.RSSI(i);
+          bool locked = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+
+          String netMsg = "WIFI_NET:" + netSsid + ":" + String(rssi) + ":" + (locked ? "1" : "0");
+          delay(35);
+          notifyBle(netMsg);
+        }
+
+        delay(35);
+        notifyBle("WIFI_SCAN_END");
+      }
+
+      WiFi.scanDelete();
+
+      // If we had a saved Wi-Fi and we are not connected, resume connection
+      if (savedSsid.length() > 0 && WiFi.status() != WL_CONNECTED) {
+        Serial.println("[WiFi] Resuming connection to " + savedSsid);
+        WiFi.begin(savedSsid.c_str(), savedPass.c_str());
+        isConnectingWifi = true;
+        wifiConnectStart = millis();
+      }
+    } else if (n == WIFI_SCAN_FAILED || (millis() - scanWifiStart > 12000)) {
+      isScanningWifi = false;
+      Serial.println("[WiFi] Scan failed or timed out");
+      notifyBle("WIFI_SCAN_EMPTY");
+      WiFi.scanDelete();
+
+      if (savedSsid.length() > 0 && WiFi.status() != WL_CONNECTED) {
+        WiFi.begin(savedSsid.c_str(), savedPass.c_str());
+        isConnectingWifi = true;
+        wifiConnectStart = millis();
       }
     }
-    if (alreadyReported) continue;
-
-    reported[reportedCount++] = netSsid;
-    int rssi = WiFi.RSSI(i);
-    bool locked = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
-
-    String netMsg = "WIFI_NET:" + netSsid + ":" + String(rssi) + ":" + (locked ? "1" : "0");
-    delay(40);
-    notifyBle(netMsg);
   }
-
-  delay(40);
-  notifyBle("WIFI_SCAN_END");
-  WiFi.scanDelete();
 }
 
 // ── Central Command Handler (Called by BLE and MQTT) ──────────────────────
@@ -217,7 +273,8 @@ void processCommand(String rawCmd) {
 
   // ── Wi-Fi Configuration Commands ──
   if (cmd == "SCAN_WIFI") {
-    performWifiScan();
+    scanWifiRequested = true;
+    Serial.println("[WiFi] Scan requested by client");
     return;
   }
   else if (rawCmd.startsWith("SET_WIFI:") || rawCmd.startsWith("set_wifi:")) {
@@ -226,6 +283,8 @@ void processCommand(String rawCmd) {
     if (firstColon != -1 && secondColon != -1) {
       String newSsid = rawCmd.substring(firstColon + 1, secondColon);
       String newPass = rawCmd.substring(secondColon + 1);
+      newSsid.trim();
+      newPass.trim();
       
       // Save permanently in NVS Flash
       prefs.putString("ssid", newSsid);
@@ -246,6 +305,7 @@ void processCommand(String rawCmd) {
     savedSsid = "";
     savedPass = "";
     isConnectingWifi = false;
+    wifiWasConnected = false;
     WiFi.disconnect(true);
     Serial.println("[WiFi] Credentials cleared from Flash");
     notifyBle("WIFI_STATE:CLEARED");
@@ -368,6 +428,8 @@ void setupBLE() {
   Serial.println("[BLE] Initializing Bluetooth LE: " BLE_DEVICE_NAME " ...");
 
   BLEDevice::init(BLE_DEVICE_NAME);
+  BLEDevice::setMTU(517); // Allow up to 512-byte ATT MTU for full Wi-Fi network & state packets
+
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks());
 
@@ -429,34 +491,48 @@ void onMqttMessage(char* topic, byte* payload, unsigned int len) {
 
 // ── Non-Blocking Wi-Fi & MQTT Loop ────────────────────────────────────────
 void checkWifiAndMqtt() {
+  // If scan is currently running, don't interrupt RF channel scan
+  if (isScanningWifi || scanWifiRequested) return;
+
   // If no saved Wi-Fi, do nothing
   if (savedSsid.length() == 0) return;
 
   // 1. Wi-Fi Status Check
   if (WiFi.status() == WL_CONNECTED) {
-    if (isConnectingWifi) {
+    if (!wifiWasConnected) {
+      wifiWasConnected = true;
       isConnectingWifi = false;
-      Serial.println("[WiFi] Connected! IP: " + WiFi.localIP().toString());
-      notifyBle("WIFI_STATE:CONNECTED:" + WiFi.localIP().toString() + ":" + savedSsid);
+      String ip = WiFi.localIP().toString();
+      Serial.println("[WiFi] Connected! IP: " + ip);
+      notifyBle("WIFI_STATE:CONNECTED:" + ip + ":" + savedSsid);
     }
   } else {
-    // If we were connecting and timed out after 18 seconds
-    if (isConnectingWifi && millis() - wifiConnectStart > 18000) {
+    if (wifiWasConnected) {
+      wifiWasConnected = false;
+      Serial.println("[WiFi] Lost connection to: " + savedSsid);
+      notifyBle("WIFI_STATE:DISCONNECTED:" + savedSsid);
+    }
+
+    // If we were connecting and timed out after 20 seconds
+    if (isConnectingWifi && millis() - wifiConnectStart > 20000) {
       isConnectingWifi = false;
-      Serial.println("[WiFi] Connection failed / timed out");
+      Serial.println("[WiFi] Connection failed / timed out for: " + savedSsid);
       notifyBle("WIFI_STATE:FAILED");
     }
 
-    // Periodic Wi-Fi reconnect attempt every 20 seconds
-    if (!isConnectingWifi && millis() - lastWifiCheck > 20000) {
+    // Periodic Wi-Fi reconnect attempt every 25 seconds
+    if (!isConnectingWifi && millis() - lastWifiCheck > 25000) {
       lastWifiCheck = millis();
-      Serial.println("[WiFi] Re-attempting Wi-Fi connection...");
+      Serial.println("[WiFi] Re-attempting Wi-Fi connection to: " + savedSsid);
+      isConnectingWifi = true;
+      wifiConnectStart = millis();
       WiFi.begin(savedSsid.c_str(), savedPass.c_str());
+      notifyBle("WIFI_STATE:CONNECTING:" + savedSsid);
     }
     return;
   }
 
-  // 2. Cloud MQTT Client Connection
+  // 2. Cloud MQTT Client Connection (Worldwide remote control)
   if (!mqtt.connected()) {
     static unsigned long lastMqttAttempt = 0;
     if (millis() - lastMqttAttempt > 6000) {
@@ -485,7 +561,7 @@ void checkWifiAndMqtt() {
 // ── Setup ─────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
-  Serial.setTxTimeoutMs(0); // Eliminates any serial blocking when terminal is closed
+  Serial.setTxTimeoutMs(0); // Eliminates serial blocking when terminal is closed
   delay(100);
 
   Serial.println("\n========================================");
@@ -559,7 +635,10 @@ void loop() {
     }
   }
 
-  // 4. Non-blocking Wi-Fi & Cloud MQTT handling
+  // 4. Non-blocking Wi-Fi scan handler (so Bluetooth never disconnects during scan)
+  handleWifiScan();
+
+  // 5. Non-blocking Wi-Fi & Cloud MQTT handling
   checkWifiAndMqtt();
 
   delay(1);

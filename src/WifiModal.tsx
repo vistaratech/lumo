@@ -20,25 +20,30 @@ import { ScannedWifi, useHome } from './useHome';
 interface WifiModalProps {
   visible: boolean;
   onClose: () => void;
+  onOpenBluetooth?: () => void;
 }
 
 function SignalIcon({ rssi }: { rssi: number }) {
   if (rssi >= -60) {
-    return <Ionicons name="wifi" size={18} color="#06D6A0" />;
+    return <Ionicons name="wifi" size={17} color="#06D6A0" />;
   } else if (rssi >= -75) {
-    return <Ionicons name="wifi" size={18} color="#38BDF8" />;
+    return <Ionicons name="wifi" size={17} color="#38BDF8" />;
   } else {
-    return <Ionicons name="wifi-outline" size={18} color="#F59E0B" />;
+    return <Ionicons name="wifi-outline" size={17} color="#F59E0B" />;
   }
 }
 
-export default function WifiModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export default function WifiModal({
+  visible,
+  onClose,
+  onOpenBluetooth,
+}: WifiModalProps) {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const isDesktop = width > 768;
+  const isDesktop = width > 580;
 
   const [ssid, setSsid] = useState(h.wifiSsid || '');
   const [password, setPassword] = useState('');
@@ -82,7 +87,7 @@ export default function WifiModal({ visible, onClose }: { visible: boolean; onCl
     try {
       await h.configureWifi(ssid.trim(), password);
       notify('success');
-      setTimeout(() => setSubmitting(false), 2000);
+      setTimeout(() => setSubmitting(false), 2200);
     } catch {
       setSubmitting(false);
       notify('error');
@@ -101,6 +106,8 @@ export default function WifiModal({ visible, onClose }: { visible: boolean; onCl
       setSubmitting(false);
     }
   };
+
+  if (!visible) return null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -124,60 +131,156 @@ export default function WifiModal({ visible, onClose }: { visible: boolean; onCl
           style={[
             s.dialog,
             {
-              backgroundColor: isDark ? '#121726' : '#FFFFFF',
-              borderColor: isDark ? '#1E273A' : '#E2E8F0',
+              backgroundColor: isDark ? '#111726' : '#FFFFFF',
+              borderColor: isDark ? '#1F2A3F' : '#E2E8F0',
               borderRadius: isDesktop ? 28 : 0,
               borderTopLeftRadius: 28,
               borderTopRightRadius: 28,
               maxHeight: height * 0.9,
-              width: isDesktop ? 520 : '100%',
+              width: isDesktop ? 480 : '100%',
             },
           ]}
         >
-          {/* Header Bar */}
-          <View style={[s.header, { borderBottomColor: isDark ? '#1F2A3F' : '#E2E8F0' }]}>
+          {/* Top Sheet Handle (Mobile) */}
+          {!isDesktop && <View style={[s.handle, { backgroundColor: isDark ? '#334155' : '#CBD5E1' }]} />}
+
+          {/* Clean Header Bar */}
+          <View style={[s.header, { borderBottomColor: isDark ? '#1C2638' : '#F1F5F9' }]}>
             <View style={s.headerLeft}>
-              <View style={[s.wifiIconBadge, { backgroundColor: '#06D6A018' }]}>
-                <Ionicons name="wifi" size={18} color="#06D6A0" />
+              <View
+                style={[
+                  s.wifiIconBadge,
+                  {
+                    backgroundColor:
+                      h.wifiStatus === 'connected'
+                        ? '#06D6A018'
+                        : h.bleActive
+                        ? '#0084FF18'
+                        : isDark
+                        ? '#1E293B'
+                        : '#F1F5F9',
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="wifi"
+                  size={18}
+                  color={h.wifiStatus === 'connected' ? '#06D6A0' : h.bleActive ? '#0084FF' : colors.dim}
+                />
               </View>
               <View>
                 <Text style={[s.title, { color: colors.text }]}>Device Wi-Fi Setup</Text>
-                <Text style={[s.sub, { color: colors.dim }]}>Connect ESP32 for Remote SIM Access</Text>
+                <Text style={[s.sub, { color: colors.dim }]}>
+                  {h.bleActive ? 'ESP32 Connected via Bluetooth' : 'Connect ESP32 for Remote Access'}
+                </Text>
               </View>
             </View>
 
-            <Press onPress={onClose} style={[s.closeBtn, { backgroundColor: isDark ? '#1B2438' : '#F1F5F9' }]}>
-              <Ionicons name="close" size={18} color={colors.dim} />
+            <Press onPress={onClose} style={[s.closeBtn, { backgroundColor: isDark ? '#1A2336' : '#F1F5F9' }]}>
+              <Ionicons name="close" size={17} color={colors.dim} />
             </Press>
           </View>
 
-          <ScrollView
-            contentContainerStyle={s.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Bluetooth Prerequisite Alert */}
-            {!h.bleActive && (
-              <Animated.View entering={FadeIn.duration(200)} style={s.warningBanner}>
-                <Ionicons name="bluetooth" size={16} color="#0084FF" />
-                <Text style={s.warningText}>
-                  Connect to ESP32 via Bluetooth first to scan and send Wi-Fi credentials.
-                </Text>
-              </Animated.View>
-            )}
+          {/* ─────────────────────────────────────────────────────────── */}
+          {/* PHASE 1: BLUETOOTH NOT CONNECTED (Clean, Focused Hero Step) */}
+          {/* ─────────────────────────────────────────────────────────── */}
+          {!h.bleActive ? (
+            <View style={s.unpairedContainer}>
+              <View
+                style={[
+                  s.bluetoothHeroBox,
+                  {
+                    backgroundColor: isDark ? '#162032' : '#F8FAFC',
+                    borderColor: isDark ? '#23324A' : '#E2E8F0',
+                  },
+                ]}
+              >
+                <View style={s.bluetoothIconRing}>
+                  <View style={s.bluetoothIconCore}>
+                    <Ionicons name="bluetooth" size={28} color="#0084FF" />
+                  </View>
+                </View>
 
-            {/* Current Hardware Wi-Fi Status Card */}
-            <View
-              style={[
-                s.statusCard,
-                {
-                  backgroundColor: isDark ? '#161D2E' : '#F8FAFC',
-                  borderColor: isDark ? '#232E45' : '#E2E8F0',
-                },
-              ]}
+                <Text style={[s.heroTitle, { color: colors.text }]}>
+                  Bluetooth Link Required
+                </Text>
+                <Text style={[s.heroSubtitle, { color: colors.dim }]}>
+                  To detect nearby 2.4 GHz Wi-Fi and configure your ESP32 router credentials, connect via Bluetooth first.
+                </Text>
+
+                {/* Value Checklist */}
+                <View style={s.featureList}>
+                  <View style={s.featureRow}>
+                    <Ionicons name="flash" size={14} color="#06D6A0" />
+                    <Text style={[s.featureText, { color: colors.text }]}>
+                      Fast Auto-Scan for 2.4 GHz Networks
+                    </Text>
+                  </View>
+                  <View style={s.featureRow}>
+                    <Ionicons name="shield-checkmark" size={14} color="#0084FF" />
+                    <Text style={[s.featureText, { color: colors.text }]}>
+                      Encrypted Password Stored in ESP32 Flash
+                    </Text>
+                  </View>
+                  <View style={s.featureRow}>
+                    <Ionicons name="globe" size={14} color="#8B5CF6" />
+                    <Text style={[s.featureText, { color: colors.text }]}>
+                      Worldwide Control from Mobile SIM (4G/5G)
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Primary Action Button */}
+                <Press
+                  onPress={() => {
+                    tap();
+                    onClose();
+                    if (onOpenBluetooth) {
+                      setTimeout(onOpenBluetooth, 220);
+                    }
+                  }}
+                  style={s.connectBleBtn}
+                >
+                  <Ionicons name="bluetooth" size={18} color="#FFFFFF" />
+                  <Text style={s.connectBleBtnText}>Connect Bluetooth Now</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                </Press>
+              </View>
+
+              <Press onPress={onClose} style={s.cancelLink}>
+                <Text style={[s.cancelLinkText, { color: colors.dim }]}>Cancel</Text>
+              </Press>
+            </View>
+          ) : (
+            /* ───────────────────────────────────────────────────────── */
+            /* PHASE 2: BLUETOOTH CONNECTED (Neat, Interactive Scanner)  */
+            /* ───────────────────────────────────────────────────────── */
+            <ScrollView
+              contentContainerStyle={s.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
-              <View style={s.statusRow}>
-                <View style={s.statusLeft}>
+              {/* Hardware Live Wi-Fi Status Bar */}
+              <View
+                style={[
+                  s.statusBanner,
+                  h.wifiStatus === 'connected'
+                    ? {
+                        backgroundColor: isDark ? '#06D6A012' : '#ECFDF5',
+                        borderColor: isDark ? '#06D6A035' : '#A7F3D0',
+                      }
+                    : h.wifiStatus === 'connecting'
+                    ? {
+                        backgroundColor: isDark ? '#F59E0B12' : '#FEF3C7',
+                        borderColor: isDark ? '#F59E0B35' : '#FDE68A',
+                      }
+                    : {
+                        backgroundColor: isDark ? '#162032' : '#F8FAFC',
+                        borderColor: isDark ? '#23324A' : '#E2E8F0',
+                      },
+                ]}
+              >
+                <View style={s.statusBannerLeft}>
                   <View
                     style={[
                       s.statusDot,
@@ -191,270 +294,303 @@ export default function WifiModal({ visible, onClose }: { visible: boolean; onCl
                       },
                     ]}
                   />
-                  <Text style={[s.statusLabel, { color: colors.text }]}>
-                    {h.wifiStatus === 'connected'
-                      ? 'Connected to Wi-Fi'
-                      : h.wifiStatus === 'connecting'
-                      ? 'Connecting to Network…'
-                      : 'Not Connected to Wi-Fi'}
-                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        s.statusBannerTitle,
+                        {
+                          color:
+                            h.wifiStatus === 'connected'
+                              ? '#06D6A0'
+                              : h.wifiStatus === 'connecting'
+                              ? '#F59E0B'
+                              : colors.text,
+                        },
+                      ]}
+                    >
+                      {h.wifiStatus === 'connected'
+                        ? `Connected to "${h.wifiSsid || 'Home Wi-Fi'}"`
+                        : h.wifiStatus === 'connecting'
+                        ? 'Connecting to Wi-Fi Router…'
+                        : 'Wi-Fi Not Connected'}
+                    </Text>
+                    <Text style={[s.statusBannerSub, { color: colors.dim }]}>
+                      {h.wifiStatus === 'connected'
+                        ? `IP: ${h.wifiIp || 'Assigned'} • Remote Cloud Control Active`
+                        : h.wifiStatus === 'connecting'
+                        ? 'Verifying credentials with ESP32...'
+                        : 'Select your home network below to connect'}
+                    </Text>
+                  </View>
                 </View>
 
-                {h.wifiStatus === 'connecting' && <ActivityIndicator size="small" color="#F59E0B" />}
+                {h.wifiStatus === 'connecting' ? (
+                  <ActivityIndicator size="small" color="#F59E0B" />
+                ) : h.wifiStatus === 'connected' ? (
+                  <Press onPress={handleForget} style={s.forgetPill}>
+                    <Ionicons name="trash-outline" size={13} color="#EF4444" />
+                    <Text style={s.forgetPillText}>Forget</Text>
+                  </Press>
+                ) : null}
               </View>
 
-              {h.wifiStatus === 'connected' && (
-                <View style={s.metaWrap}>
-                  {h.wifiSsid ? (
-                    <Text style={[s.metaText, { color: colors.dim }]}>
-                      Network:{' '}
-                      <Text style={{ color: colors.text, fontWeight: '600' }}>{h.wifiSsid}</Text>
-                    </Text>
-                  ) : null}
-                  {h.wifiIp ? (
-                    <Text style={[s.metaText, { color: colors.dim }]}>
-                      IP Address:{' '}
-                      <Text style={{ color: colors.text, fontWeight: '600' }}>{h.wifiIp}</Text>
-                    </Text>
-                  ) : null}
+              {/* ── Discovered Nearby Wi-Fi List ── */}
+              <View style={s.section}>
+                <View style={s.sectionHeaderRow}>
+                  <Text style={[s.sectionTitle, { color: colors.dim }]}>
+                    AVAILABLE NETWORKS (2.4 GHz)
+                  </Text>
+                  <Press
+                    disabled={h.isScanningWifi}
+                    onPress={() => {
+                      tap();
+                      h.scanWifi();
+                    }}
+                    style={[
+                      s.scanPill,
+                      {
+                        backgroundColor: isDark ? '#1A2438' : '#EDF2F7',
+                        borderColor: isDark ? '#26344E' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    {h.isScanningWifi ? (
+                      <>
+                        <ActivityIndicator size="small" color="#0084FF" style={{ transform: [{ scale: 0.65 }] }} />
+                        <Text style={[s.scanPillText, { color: '#0084FF' }]}>Scanning…</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="refresh-outline" size={13} color="#0084FF" />
+                        <Text style={[s.scanPillText, { color: '#0084FF' }]}>Scan</Text>
+                      </>
+                    )}
+                  </Press>
                 </View>
-              )}
-            </View>
 
-            {/* ── Discovered Nearby Wi-Fi Section ── */}
-            <View style={s.sectionBlock}>
-              <View style={s.sectionTitleRow}>
-                <Text style={[s.inputLabel, { color: colors.dim }]}>NEARBY WI-FI NETWORKS (2.4 GHz)</Text>
+                {/* Loading Banner */}
+                {h.isScanningWifi && h.scannedWifiList.length === 0 && (
+                  <View style={[s.scanningPlaceholder, { backgroundColor: isDark ? '#141C2B' : '#F8FAFC' }]}>
+                    <ActivityIndicator size="small" color="#0084FF" />
+                    <Text style={[s.scanningPlaceholderText, { color: colors.dim }]}>
+                      ESP32 is scanning nearby 2.4 GHz channels…
+                    </Text>
+                  </View>
+                )}
+
+                {/* List of Available Networks */}
+                {h.scannedWifiList.length > 0 ? (
+                  <View style={s.wifiList}>
+                    {h.scannedWifiList.map((net) => {
+                      const isSelected = ssid === net.ssid;
+                      return (
+                        <Press
+                          key={net.ssid}
+                          onPress={() => handleSelectNetwork(net)}
+                          style={[
+                            s.wifiCard,
+                            {
+                              backgroundColor: isSelected
+                                ? isDark
+                                  ? '#06D6A015'
+                                  : '#ECFDF5'
+                                : isDark
+                                ? '#141C2B'
+                                : '#F8FAFC',
+                              borderColor: isSelected
+                                ? '#06D6A0'
+                                : isDark
+                                ? '#1F2A3D'
+                                : '#E2E8F0',
+                            },
+                          ]}
+                        >
+                          <View style={s.wifiCardLeft}>
+                            <SignalIcon rssi={net.rssi} />
+                            <View style={{ flex: 1 }}>
+                              <Text
+                                style={[
+                                  s.wifiCardName,
+                                  {
+                                    color: isSelected ? '#06D6A0' : colors.text,
+                                    fontWeight: isSelected ? '700' : '600',
+                                  },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {net.ssid}
+                              </Text>
+                              <Text style={[s.wifiCardSub, { color: colors.dim }]}>
+                                {net.rssi >= -60 ? 'Strong' : net.rssi >= -75 ? 'Good' : 'Fair'}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View style={s.wifiCardRight}>
+                            {net.locked ? (
+                              <Ionicons name="lock-closed" size={13} color={colors.dim} />
+                            ) : (
+                              <View style={s.openBadge}>
+                                <Text style={s.openBadgeText}>OPEN</Text>
+                              </View>
+                            )}
+                            {isSelected ? (
+                              <View style={s.checkCircle}>
+                                <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+                              </View>
+                            ) : (
+                              <View style={[s.radioCircle, { borderColor: isDark ? '#334155' : '#CBD5E1' }]} />
+                            )}
+                          </View>
+                        </Press>
+                      );
+                    })}
+                  </View>
+                ) : !h.isScanningWifi ? (
+                  <Press
+                    onPress={() => {
+                      tap();
+                      h.scanWifi();
+                    }}
+                    style={[s.emptyBox, { borderColor: colors.line }]}
+                  >
+                    <Ionicons name="wifi-outline" size={22} color="#0084FF" />
+                    <Text style={[s.emptyBoxText, { color: colors.text }]}>
+                      No networks detected yet
+                    </Text>
+                    <Text style={[s.emptyBoxSub, { color: colors.dim }]}>
+                      Tap here to scan nearby 2.4 GHz Wi-Fi routers
+                    </Text>
+                  </Press>
+                ) : null}
+
+                {/* Manual SSID toggle */}
                 <Press
-                  disabled={!h.bleActive || h.isScanningWifi}
                   onPress={() => {
                     tap();
-                    h.scanWifi();
+                    setManualEntry(!manualEntry);
                   }}
-                  style={[s.scanBtn, { backgroundColor: isDark ? '#1C253B' : '#EDF2F7' }]}
+                  style={s.manualLink}
                 >
-                  {h.isScanningWifi ? (
+                  <Ionicons
+                    name={manualEntry ? 'chevron-up' : 'chevron-forward'}
+                    size={13}
+                    color="#0084FF"
+                  />
+                  <Text style={s.manualLinkText}>
+                    {manualEntry ? 'Hide manual name entry' : 'Or enter hidden network name manually'}
+                  </Text>
+                </Press>
+              </View>
+
+              {/* ── Input Card (Shown when a network is chosen or manual entry is active) ── */}
+              {(manualEntry || ssid.trim().length > 0) && (
+                <Animated.View entering={FadeIn.duration(200)} style={s.credentialCard}>
+                  {manualEntry && (
+                    <View style={s.fieldGroup}>
+                      <Text style={[s.fieldLabel, { color: colors.dim }]}>NETWORK NAME (SSID)</Text>
+                      <View
+                        style={[
+                          s.inputBox,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.line,
+                          },
+                        ]}
+                      >
+                        <Ionicons name="wifi-outline" size={16} color={colors.dim} />
+                        <TextInput
+                          value={ssid}
+                          onChangeText={setSsid}
+                          placeholder="e.g. Home_Router_2.4G"
+                          placeholderTextColor={colors.dim}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          style={[s.input, { color: colors.text }]}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  <View style={s.fieldGroup}>
+                    <View style={s.fieldLabelRow}>
+                      <Text style={[s.fieldLabel, { color: colors.dim }]}>WI-FI PASSWORD</Text>
+                      {ssid.trim().length > 0 && (
+                        <Text style={s.fieldBadge} numberOfLines={1}>
+                          for {ssid}
+                        </Text>
+                      )}
+                    </View>
+                    <View
+                      style={[
+                        s.inputBox,
+                        {
+                          backgroundColor: colors.card,
+                          borderColor: colors.line,
+                        },
+                      ]}
+                    >
+                      <Ionicons name="lock-closed-outline" size={16} color={colors.dim} />
+                      <TextInput
+                        value={password}
+                        onChangeText={setPassword}
+                        placeholder="Enter Wi-Fi password"
+                        placeholderTextColor={colors.dim}
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        style={[s.input, { color: colors.text }]}
+                      />
+                      <Press onPress={() => setShowPassword(!showPassword)} style={s.eyeToggle}>
+                        <Ionicons
+                          name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                          size={16}
+                          color={colors.dim}
+                        />
+                      </Press>
+                    </View>
+                  </View>
+                </Animated.View>
+              )}
+
+              {/* Minimal Clean Helper Tip */}
+              <View style={s.helperBanner}>
+                <Ionicons name="information-circle-outline" size={15} color="#0084FF" />
+                <Text style={s.helperText}>
+                  ESP32 supports 2.4 GHz Wi-Fi. Once paired, you can control switches from anywhere in the world using phone SIM net!
+                </Text>
+              </View>
+
+              {/* Action Button */}
+              <View style={s.buttonContainer}>
+                <Press
+                  disabled={submitting || !ssid.trim()}
+                  onPress={handleSave}
+                  style={[
+                    s.actionBtn,
+                    {
+                      backgroundColor: !ssid.trim() ? '#475569' : '#06D6A0',
+                      opacity: submitting || !ssid.trim() ? 0.65 : 1,
+                    },
+                  ]}
+                >
+                  {submitting ? (
                     <>
-                      <ActivityIndicator size="small" color="#0084FF" style={{ transform: [{ scale: 0.7 }] }} />
-                      <Text style={[s.scanBtnText, { color: '#0084FF' }]}>Scanning…</Text>
+                      <ActivityIndicator size="small" color="#0B101B" />
+                      <Text style={s.actionBtnText}>Provisioning ESP32…</Text>
                     </>
                   ) : (
                     <>
-                      <Ionicons name="refresh-outline" size={13} color="#0084FF" />
-                      <Text style={[s.scanBtnText, { color: '#0084FF' }]}>Scan</Text>
+                      <Ionicons name="paper-plane" size={16} color="#0B101B" />
+                      <Text style={s.actionBtnText}>
+                        {ssid.trim() ? `Connect to "${ssid}"` : 'Select a Network Above'}
+                      </Text>
                     </>
                   )}
                 </Press>
               </View>
-
-              {/* Scanning status indicator */}
-              {h.isScanningWifi && h.scannedWifiList.length === 0 && (
-                <View style={[s.scanLoadingCard, { backgroundColor: isDark ? '#151C2C' : '#F1F5F9' }]}>
-                  <ActivityIndicator size="small" color="#0084FF" />
-                  <Text style={[s.scanLoadingText, { color: colors.dim }]}>
-                    ESP32 is scanning nearby 2.4 GHz networks…
-                  </Text>
-                </View>
-              )}
-
-              {/* Discovered Wi-Fi Networks List */}
-              {h.scannedWifiList.length > 0 ? (
-                <View style={s.wifiList}>
-                  {h.scannedWifiList.map((net) => {
-                    const isSelected = ssid === net.ssid;
-                    return (
-                      <Press
-                        key={net.ssid}
-                        onPress={() => handleSelectNetwork(net)}
-                        style={[
-                          s.wifiItem,
-                          {
-                            backgroundColor: isSelected
-                              ? isDark
-                                ? '#06D6A018'
-                                : '#ECFDF5'
-                              : isDark
-                              ? '#161D2E'
-                              : '#F8FAFC',
-                            borderColor: isSelected ? '#06D6A0' : colors.line,
-                          },
-                        ]}
-                      >
-                        <View style={s.wifiItemLeft}>
-                          <SignalIcon rssi={net.rssi} />
-                          <View style={{ flex: 1 }}>
-                            <Text
-                              style={[
-                                s.wifiItemName,
-                                {
-                                  color: isSelected ? '#06D6A0' : colors.text,
-                                  fontWeight: isSelected ? '700' : '600',
-                                },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {net.ssid}
-                            </Text>
-                            <Text style={[s.wifiItemSub, { color: colors.dim }]}>
-                              {net.rssi >= -60 ? 'Strong Signal' : net.rssi >= -75 ? 'Good Signal' : 'Fair Signal'}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={s.wifiItemRight}>
-                          {net.locked ? (
-                            <Ionicons name="lock-closed" size={14} color={colors.dim} />
-                          ) : (
-                            <View style={s.openBadge}>
-                              <Text style={s.openBadgeText}>OPEN</Text>
-                            </View>
-                          )}
-                          {isSelected && <Ionicons name="checkmark-circle" size={18} color="#06D6A0" />}
-                        </View>
-                      </Press>
-                    );
-                  })}
-                </View>
-              ) : !h.isScanningWifi ? (
-                <View style={[s.emptyScanCard, { borderColor: colors.line }]}>
-                  <Text style={[s.emptyScanText, { color: colors.dim }]}>
-                    {h.bleActive
-                      ? 'No networks listed yet. Tap "Scan" to detect nearby Wi-Fi.'
-                      : 'Connect via Bluetooth to view nearby Wi-Fi.'}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Manual Network Entry Toggle */}
-            <Press
-              onPress={() => {
-                tap();
-                setManualEntry(!manualEntry);
-              }}
-              style={s.manualToggleRow}
-            >
-              <Ionicons
-                name={manualEntry ? 'chevron-up-outline' : 'chevron-down-outline'}
-                size={14}
-                color="#0084FF"
-              />
-              <Text style={s.manualToggleText}>
-                {manualEntry ? 'Hide Manual Entry' : 'Or Enter Hidden Network Name Manually'}
-              </Text>
-            </Press>
-
-            {/* Manual SSID Input (Shown if manualEntry or network selected) */}
-            {(manualEntry || !h.scannedWifiList.length) && (
-              <View style={s.formGroup}>
-                <Text style={[s.inputLabel, { color: colors.dim }]}>SELECTED NETWORK NAME (SSID)</Text>
-                <View
-                  style={[
-                    s.inputWrapper,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.line,
-                    },
-                  ]}
-                >
-                  <Ionicons name="wifi-outline" size={17} color={colors.dim} />
-                  <TextInput
-                    value={ssid}
-                    onChangeText={setSsid}
-                    placeholder="e.g. MyHome_WiFi_2.4G"
-                    placeholderTextColor={colors.dim}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={[s.input, { color: colors.text }]}
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Wi-Fi Password Input */}
-            <View style={s.formGroup}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={[s.inputLabel, { color: colors.dim }]}>WI-FI PASSWORD</Text>
-                {ssid.trim().length > 0 && (
-                  <Text style={{ fontSize: 11, color: '#06D6A0', fontWeight: '600' }}>
-                    for "{ssid}"
-                  </Text>
-                )}
-              </View>
-              <View
-                style={[
-                  s.inputWrapper,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.line,
-                  },
-                ]}
-              >
-                <Ionicons name="lock-closed-outline" size={17} color={colors.dim} />
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter Wi-Fi password"
-                  placeholderTextColor={colors.dim}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={[s.input, { color: colors.text }]}
-                />
-                <Press onPress={() => setShowPassword(!showPassword)} style={s.eyeBtn}>
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={17}
-                    color={colors.dim}
-                  />
-                </Press>
-              </View>
-            </View>
-
-            {/* Explanatory Tip */}
-            <View style={s.tipRow}>
-              <Ionicons name="information-circle-outline" size={15} color="#38BDF8" />
-              <Text style={s.tipText}>
-                Requires 2.4 GHz Wi-Fi. Once connected, your ESP32 stays online 24/7 so you can control your switches from mobile SIM net anywhere!
-              </Text>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={s.btnRow}>
-              <Press
-                disabled={submitting || !h.bleActive || !ssid.trim()}
-                onPress={handleSave}
-                style={[
-                  s.submitBtn,
-                  {
-                    backgroundColor: !h.bleActive || !ssid.trim() ? '#475569' : '#06D6A0',
-                  },
-                ]}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#0B101B" />
-                ) : (
-                  <>
-                    <Ionicons name="paper-plane-outline" size={16} color="#0B101B" />
-                    <Text style={s.submitBtnText}>
-                      {ssid.trim() ? `Connect to "${ssid}"` : 'Select a Network Above'}
-                    </Text>
-                  </>
-                )}
-              </Press>
-
-              {h.wifiStatus === 'connected' && (
-                <Press
-                  disabled={submitting || !h.bleActive}
-                  onPress={handleForget}
-                  style={[s.forgetBtn, { borderColor: '#EF444433' }]}
-                >
-                  <Ionicons name="trash-outline" size={15} color="#EF4444" />
-                  <Text style={s.forgetBtnText}>Forget Wi-Fi</Text>
-                </Press>
-              )}
-            </View>
-          </ScrollView>
+            </ScrollView>
+          )}
         </Animated.View>
       </View>
     </Modal>
@@ -467,20 +603,28 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(5, 8, 16, 0.72)',
   },
   dialog: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 24,
-    elevation: 8,
+    shadowRadius: 28,
+    elevation: 12,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 22,
-    paddingVertical: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
   },
   headerLeft: {
@@ -489,20 +633,20 @@ const s = StyleSheet.create({
     gap: 12,
   },
   wifiIconBadge: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   sub: {
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 1,
   },
   closeBtn: {
     width: 32,
@@ -511,225 +655,333 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scrollContent: {
+
+  /* ── Phase 1: Unpaired Bluetooth Hero ── */
+  unpairedContainer: {
     padding: 22,
-    gap: 16,
+    alignItems: 'center',
   },
-  warningBanner: {
+  bluetoothHeroBox: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 22,
+    padding: 22,
+    alignItems: 'center',
+  },
+  bluetoothIconRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#0084FF15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  bluetoothIconCore: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#0084FF25',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  featureList: {
+    width: '100%',
+    gap: 10,
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#0084FF15',
-    borderColor: '#0084FF33',
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  },
+  featureText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  connectBleBtn: {
+    width: '100%',
+    height: 48,
+    backgroundColor: '#0084FF',
     borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#0084FF',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 4,
   },
-  warningText: {
-    fontSize: 12,
-    color: '#38BDF8',
-    flex: 1,
-    lineHeight: 16,
+  connectBleBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
-  statusCard: {
-    borderWidth: 1.5,
-    borderRadius: 18,
-    padding: 14,
-    gap: 6,
+  cancelLink: {
+    marginTop: 16,
+    padding: 8,
   },
-  statusRow: {
+  cancelLinkText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  /* ── Phase 2: Connected Provisioning Scanner ── */
+  scrollContent: {
+    padding: 18,
+    gap: 14,
+  },
+  statusBanner: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
-  statusLeft: {
+  statusBannerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    flex: 1,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  statusLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+  statusBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
   },
-  metaWrap: {
-    marginTop: 4,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#334155',
-    gap: 2,
+  statusBannerSub: {
+    fontSize: 11,
+    marginTop: 1,
   },
-  metaText: {
-    fontSize: 12,
+  forgetPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EF444415',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
-  sectionBlock: {
+  forgetPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  section: {
     gap: 8,
   },
-  sectionTitleRow: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 2,
   },
-  scanBtn: {
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  scanPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 10,
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 8,
+    borderWidth: 1,
   },
-  scanBtnText: {
-    fontSize: 12,
+  scanPillText: {
+    fontSize: 11,
     fontWeight: '700',
   },
-  scanLoadingCard: {
+  scanningPlaceholder: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     padding: 14,
-    borderRadius: 16,
+    borderRadius: 14,
   },
-  scanLoadingText: {
+  scanningPlaceholderText: {
     fontSize: 12,
   },
   wifiList: {
-    gap: 8,
-    maxHeight: 220,
+    gap: 6,
+    maxHeight: 200,
   },
-  wifiItem: {
+  wifiCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1.2,
   },
-  wifiItemLeft: {
+  wifiCardLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     flex: 1,
   },
-  wifiItemName: {
-    fontSize: 14,
+  wifiCardName: {
+    fontSize: 13,
   },
-  wifiItemSub: {
-    fontSize: 11,
-    marginTop: 1,
+  wifiCardSub: {
+    fontSize: 10,
   },
-  wifiItemRight: {
+  wifiCardRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   openBadge: {
-    backgroundColor: '#06D6A020',
+    backgroundColor: '#06D6A018',
     paddingVertical: 2,
     paddingHorizontal: 6,
-    borderRadius: 6,
+    borderRadius: 5,
   },
   openBadgeText: {
     fontSize: 9,
     fontWeight: '800',
     color: '#06D6A0',
   },
-  emptyScanCard: {
-    padding: 14,
-    borderRadius: 16,
+  checkCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#06D6A0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+  },
+  emptyBox: {
     borderWidth: 1,
     borderStyle: 'dashed',
+    borderRadius: 16,
+    padding: 18,
     alignItems: 'center',
+    gap: 4,
   },
-  emptyScanText: {
-    fontSize: 12,
+  emptyBoxText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  emptyBoxSub: {
+    fontSize: 11,
     textAlign: 'center',
   },
-  manualToggleRow: {
+  manualLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
-  manualToggleText: {
-    fontSize: 12,
+  manualLinkText: {
+    fontSize: 11,
     color: '#0084FF',
     fontWeight: '600',
   },
-  formGroup: {
-    gap: 6,
+  credentialCard: {
+    gap: 10,
   },
-  inputLabel: {
-    fontSize: 11,
+  fieldGroup: {
+    gap: 5,
+  },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  fieldLabel: {
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.8,
   },
-  inputWrapper: {
+  fieldBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#06D6A0',
+    maxWidth: 160,
+  },
+  inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    height: 50,
+    borderWidth: 1.2,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
     gap: 10,
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     height: '100%',
   },
-  eyeBtn: {
+  eyeToggle: {
     padding: 6,
   },
-  tipRow: {
+  helperBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    backgroundColor: '#0284C712',
-    padding: 12,
-    borderRadius: 14,
+    backgroundColor: '#0084FF10',
+    padding: 10,
+    borderRadius: 12,
   },
-  tipText: {
-    fontSize: 12,
-    color: '#38BDF8',
+  helperText: {
+    fontSize: 11,
+    color: '#0084FF',
     flex: 1,
-    lineHeight: 16,
+    lineHeight: 15,
   },
-  btnRow: {
-    gap: 10,
-    marginTop: 4,
+  buttonContainer: {
+    marginTop: 2,
   },
-  submitBtn: {
+  actionBtn: {
+    width: '100%',
+    height: 46,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 48,
-    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 3,
   },
-  submitBtnText: {
-    fontSize: 15,
+  actionBtnText: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#0B101B',
-  },
-  forgetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 14,
-    borderWidth: 1,
-    backgroundColor: '#EF444410',
-  },
-  forgetBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#EF4444',
   },
 });

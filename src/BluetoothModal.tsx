@@ -41,9 +41,11 @@ type Phase = 'IDLE' | 'SCANNING' | 'CONNECTED' | 'NOT_FOUND' | 'EXPO_GO_INFO';
 export default function BluetoothModal({
   visible,
   onClose,
+  onOpenWifi,
 }: {
   visible: boolean;
   onClose: () => void;
+  onOpenWifi?: () => void;
 }) {
   const h = useHome();
   const colors = h.colors;
@@ -58,7 +60,6 @@ export default function BluetoothModal({
   const [pairedDevice, setPairedDevice] = useState<BluetoothDeviceInfo | null>(null);
   const [discoveredDevices, setDiscoveredDevices] = useState<BluetoothDeviceInfo[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [wifiModalOpen, setWifiModalOpen] = useState(false);
 
   const nativeScanCleanupRef = useRef<(() => void) | null>(null);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -385,7 +386,13 @@ export default function BluetoothModal({
 
               <View style={s.actions}>
                 <Press
-                  onPress={() => setWifiModalOpen(true)}
+                  onPress={() => {
+                    tap();
+                    onClose();
+                    if (onOpenWifi) {
+                      setTimeout(onOpenWifi, 250);
+                    }
+                  }}
                   style={[s.primaryBtn, { backgroundColor: '#0084FF', borderColor: '#0084FF' }]}
                 >
                   <Ionicons name="wifi" size={16} color="#FFF" />
@@ -542,9 +549,6 @@ export default function BluetoothModal({
           </View>
         </Animated.View>
       </View>
-
-      {/* Embedded Wi-Fi Setup Modal */}
-      <WifiModal visible={wifiModalOpen} onClose={() => setWifiModalOpen(false)} />
     </Modal>
   );
 }

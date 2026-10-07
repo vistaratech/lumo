@@ -212,7 +212,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       if (msg.startsWith('WIFI_STATE:CONNECTED')) {
         const parts = msg.split(':');
         const ip = parts[2] || '';
-        const ssid = parts[3] || wifiSsid || '';
+        const ssid = parts.slice(3).join(':') || wifiSsid || '';
         setWifiStatus('connected');
         if (ip) setWifiIp(ip);
         if (ssid) {
@@ -221,7 +221,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         }
       } else if (msg.startsWith('WIFI_STATE:CONNECTING')) {
         const parts = msg.split(':');
-        const ssid = parts[2] || '';
+        const ssid = parts.slice(2).join(':') || '';
         setWifiStatus('connecting');
         if (ssid) setWifiSsid(ssid);
       } else if (msg.startsWith('WIFI_STATE:FAILED')) {
@@ -231,25 +231,29 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         setWifiIp(null);
       }
 
-      // Parse scanned Wi-Fi network items from ESP32
-      if (msg.startsWith('WIFI_NET:')) {
-        const parts = msg.split(':');
-        // Format: WIFI_NET:<ssid>:<rssi>:<locked>
-        if (parts.length >= 4) {
-          const netSsid = parts[1];
-          const rssi = parseInt(parts[2], 10) || -70;
-          const locked = parts[3] === '1';
+      // Parse scanned Wi-Fi network items from ESP32 (supports SSIDs with spaces, colons & emojis)
+      if (msg.startsWith('WIFI_NET:') || msg.startsWith('WN:')) {
+        const prefixLen = msg.startsWith('WIFI_NET:') ? 9 : 3;
+        const rest = msg.substring(prefixLen);
+        const lastColon = rest.lastIndexOf(':');
+        if (lastColon !== -1) {
+          const secondLastColon = rest.lastIndexOf(':', lastColon - 1);
+          if (secondLastColon !== -1) {
+            const netSsid = rest.substring(0, secondLastColon).trim();
+            const rssi = parseInt(rest.substring(secondLastColon + 1, lastColon), 10) || -70;
+            const locked = rest.substring(lastColon + 1).trim() === '1';
 
-          if (netSsid && netSsid.trim().length > 0) {
-            setScannedWifiList((prev) => {
-              const existingIdx = prev.findIndex((item) => item.ssid === netSsid);
-              if (existingIdx !== -1) {
-                const copy = [...prev];
-                copy[existingIdx] = { ssid: netSsid, rssi, locked };
-                return copy;
-              }
-              return [...prev, { ssid: netSsid, rssi, locked }].sort((a, b) => b.rssi - a.rssi);
-            });
+            if (netSsid.length > 0) {
+              setScannedWifiList((prev) => {
+                const existingIdx = prev.findIndex((item) => item.ssid === netSsid);
+                if (existingIdx !== -1) {
+                  const copy = [...prev];
+                  copy[existingIdx] = { ssid: netSsid, rssi, locked };
+                  return copy;
+                }
+                return [...prev, { ssid: netSsid, rssi, locked }].sort((a, b) => b.rssi - a.rssi);
+              });
+            }
           }
         }
       } else if (msg.startsWith('WIFI_SCAN_END') || msg.startsWith('WIFI_SCAN_EMPTY')) {

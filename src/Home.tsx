@@ -17,6 +17,7 @@ import { CHANNELS } from './config';
 import { Glow, Press, Ring, Toggle, mmss, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
+import WifiModal from './WifiModal';
 
 const sinceLabel = (t: number | null, now: number) => {
   if (!t) return 'Active';
@@ -250,6 +251,94 @@ function ConnectButton({
   );
 }
 
+function WifiButton({
+  wifiStatus,
+  wifiSsid,
+  bleActive,
+  isDark,
+  onPress,
+}: {
+  wifiStatus: string;
+  wifiSsid: string | null;
+  bleActive: boolean;
+  isDark: boolean;
+  onPress: () => void;
+}) {
+  const isConnected = wifiStatus === 'connected';
+  const isConnecting = wifiStatus === 'connecting';
+
+  return (
+    <Press onPress={onPress}>
+      <View
+        style={[
+          s.wifiHeaderBtn,
+          isConnected
+            ? {
+                backgroundColor: isDark ? 'rgba(6, 214, 160, 0.12)' : '#ECFDF5',
+                borderColor: isDark ? 'rgba(6, 214, 160, 0.4)' : '#A7F3D0',
+              }
+            : isConnecting
+            ? {
+                backgroundColor: isDark ? 'rgba(245, 158, 11, 0.14)' : '#FEF3C7',
+                borderColor: isDark ? 'rgba(245, 158, 11, 0.4)' : '#FDE68A',
+              }
+            : bleActive
+            ? {
+                backgroundColor: isDark ? 'rgba(0, 132, 255, 0.12)' : '#EFF6FF',
+                borderColor: isDark ? 'rgba(0, 132, 255, 0.35)' : '#BFDBFE',
+              }
+            : {
+                backgroundColor: isDark ? '#141C2E' : '#F1F5F9',
+                borderColor: isDark ? '#1F2C46' : '#E2E8F0',
+              },
+        ]}
+      >
+        <Ionicons
+          name={isConnected ? 'wifi' : 'wifi-outline'}
+          size={14}
+          color={
+            isConnected
+              ? '#06D6A0'
+              : isConnecting
+              ? '#F59E0B'
+              : bleActive
+              ? '#0084FF'
+              : isDark
+              ? '#64748B'
+              : '#94A3B8'
+          }
+        />
+        <Text
+          style={[
+            s.wifiHeaderBtnText,
+            {
+              color: isConnected
+                ? '#06D6A0'
+                : isConnecting
+                ? '#F59E0B'
+                : bleActive
+                ? '#0084FF'
+                : isDark
+                ? '#94A3B8'
+                : '#64748B',
+              fontWeight: isConnected || bleActive ? '600' : '500',
+            },
+          ]}
+          numberOfLines={1}
+        >
+          {isConnected
+            ? wifiSsid || 'Wi-Fi'
+            : isConnecting
+            ? 'Connecting…'
+            : bleActive
+            ? 'Wi-Fi Setup'
+            : 'Wi-Fi'}
+        </Text>
+      </View>
+    </Press>
+  );
+}
+
 export default function Home() {
   const h = useHome();
   const colors = h.colors;
@@ -263,12 +352,13 @@ export default function Home() {
 
   const allOnActive = onCount === CHANNELS.length && CHANNELS.length > 0;
   const [bleModalOpen, setBleModalOpen] = useState(false);
+  const [wifiModalOpen, setWifiModalOpen] = useState(false);
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
       {/* Top Header Bar with Exact Matching Typography from Timers & Settings */}
       <Animated.View entering={FadeInDown.duration(450)} style={s.top}>
-        <View style={{ flex: 1, paddingRight: 12 }}>
+        <View style={{ flex: 1, paddingRight: 8 }}>
           <Text style={[s.headerTitle, { color: colors.text }]}>Home</Text>
           <View style={s.greetingRow}>
             <Ionicons name={greetingIcon as any} size={15} color={greetingColor} />
@@ -276,6 +366,16 @@ export default function Home() {
           </View>
         </View>
         <View style={s.topActions}>
+          <WifiButton
+            wifiStatus={h.wifiStatus}
+            wifiSsid={h.wifiSsid}
+            bleActive={h.bleActive}
+            isDark={isDark}
+            onPress={() => {
+              tap();
+              setWifiModalOpen(true);
+            }}
+          />
           <ConnectButton
             ready={h.ready}
             isDark={isDark}
@@ -436,7 +536,18 @@ export default function Home() {
       </View>
 
       {/* Bluetooth Discovery & Pairing Modal */}
-      <BluetoothModal visible={bleModalOpen} onClose={() => setBleModalOpen(false)} />
+      <BluetoothModal
+        visible={bleModalOpen}
+        onClose={() => setBleModalOpen(false)}
+        onOpenWifi={() => setWifiModalOpen(true)}
+      />
+
+      {/* Device Wi-Fi Provisioning Modal */}
+      <WifiModal
+        visible={wifiModalOpen}
+        onClose={() => setWifiModalOpen(false)}
+        onOpenBluetooth={() => setBleModalOpen(true)}
+      />
     </ScrollView>
   );
 }
@@ -472,6 +583,25 @@ const s = StyleSheet.create({
   },
   connectBtnText: {
     fontSize: 13,
+    letterSpacing: -0.1,
+  },
+  wifiHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    elevation: 2,
+    maxWidth: 130,
+  },
+  wifiHeaderBtnText: {
+    fontSize: 12,
     letterSpacing: -0.1,
   },
   dotWrap: {
