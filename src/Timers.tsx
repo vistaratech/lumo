@@ -300,13 +300,13 @@ const s = StyleSheet.create({
   titleWrap: { gap: 2 },
   roomLabel: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '500',
     letterSpacing: 0.6,
   },
   switchName: {
-    fontSize: 19,
-    fontWeight: '600',
-    letterSpacing: -0.3,
+    fontSize: 24,
+    fontWeight: '300',
+    letterSpacing: -0.6,
   },
   pillActive: {
     flexDirection: 'row',
@@ -356,7 +356,8 @@ const s = StyleSheet.create({
   },
   presetText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '400',
+    letterSpacing: -0.2,
   },
 
   /* Active Section */
@@ -367,8 +368,9 @@ const s = StyleSheet.create({
     gap: 18,
   },
   countdownTime: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '300',
+    letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
   },
   activeActions: {
@@ -377,6 +379,7 @@ const s = StyleSheet.create({
   },
   activeSub: {
     fontSize: 12,
+    fontWeight: '300',
   },
   btnGroup: {
     flexDirection: 'row',
@@ -393,7 +396,7 @@ const s = StyleSheet.create({
   },
   extendText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '400',
   },
   stopBtn: {
     flexDirection: 'row',
@@ -406,7 +409,7 @@ const s = StyleSheet.create({
   },
   stopText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '400',
   },
 
   /* Modal */
@@ -435,8 +438,8 @@ const s = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
-  modalTitle: { fontSize: 18, fontWeight: '700' },
-  modalSub: { fontSize: 13, marginTop: 2 },
+  modalTitle: { fontSize: 20, fontWeight: '300', letterSpacing: -0.5 },
+  modalSub: { fontSize: 13, fontWeight: '300', marginTop: 2 },
   closeBtn: { padding: 4 },
   stepper: {
     flexDirection: 'row',

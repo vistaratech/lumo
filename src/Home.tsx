@@ -165,7 +165,6 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
                 style={[
                   s.tileSub,
                   { color: on ? accentColor : colors.dim },
-                  on && { fontWeight: '600' },
                 ]}
               >
                 {pending ? 'Switching…' : on ? detail : 'Turned Off'}
@@ -456,7 +455,7 @@ export default function Home() {
                 <Text
                   style={[
                     s.quickBtnText,
-                    { color: allOnActive ? '#FFFFFF' : colors.lamp, fontWeight: '700' },
+                    { color: allOnActive ? '#FFFFFF' : colors.lamp },
                   ]}
                 >
                   All On
@@ -477,7 +476,7 @@ export default function Home() {
                 ]}
               >
                 <Ionicons name="power" size={14} color={colors.dim} />
-                <Text style={[s.quickBtnText, { color: colors.dim, fontWeight: '600' }]}>All Off</Text>
+                <Text style={[s.quickBtnText, { color: colors.dim }]}>All Off</Text>
               </Press>
             </View>
           </View>
@@ -674,9 +673,9 @@ const s = StyleSheet.create({
     left: -70,
     top: -70,
   },
-  heroNum: { fontSize: 30, fontWeight: '700' },
-  heroTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
-  heroSub: { fontSize: 13, marginTop: 2 },
+  heroNum: { fontSize: 32, fontWeight: '300', letterSpacing: -0.8 },
+  heroTitle: { fontSize: 20, fontWeight: '300', letterSpacing: -0.5 },
+  heroSub: { fontSize: 13, fontWeight: '300', marginTop: 2 },
   heroBtnRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   quickBtn: {
     flexDirection: 'row',
@@ -687,7 +686,7 @@ const s = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
-  quickBtnText: { fontSize: 13 },
+  quickBtnText: { fontSize: 13, fontWeight: '300', letterSpacing: -0.2 },
   scenesContainer: {
     paddingHorizontal: 22,
     marginBottom: 14,
@@ -707,7 +706,7 @@ const s = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
-  sceneChipText: { fontSize: 13, fontWeight: '600' },
+  sceneChipText: { fontSize: 13, fontWeight: '300', letterSpacing: -0.2 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -779,8 +778,8 @@ const s = StyleSheet.create({
   burstRing: { position: 'absolute', width: 56, height: 56, borderRadius: 20, borderWidth: 2 },
   roomRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   roomDot: { width: 6, height: 6, borderRadius: 3 },
-  roomText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  tileName: { fontSize: 23, fontWeight: '700', letterSpacing: -0.3 },
+  roomText: { fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.8 },
+  tileName: { fontSize: 24, fontWeight: '300', letterSpacing: -0.6 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
-  tileSub: { fontSize: 14 },
+  tileSub: { fontSize: 13, fontWeight: '300', letterSpacing: -0.2 },
 });

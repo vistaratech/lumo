@@ -415,12 +415,12 @@ const s = StyleSheet.create({
   },
   nameText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '600',
     letterSpacing: 0.8,
   },
   tapHint: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '300',
   },
   speechBubble: {
     flexDirection: 'row',
@@ -434,7 +434,8 @@ const s = StyleSheet.create({
   bubbleMessage: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '300',
+    letterSpacing: -0.2,
     lineHeight: 18,
   },
 });
