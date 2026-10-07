@@ -1,35 +1,34 @@
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { CHANNELS } from './config';
-import { Header, Press, Ring, mmss, notify, tap } from './theme';
+import { Header, Press, Ring, mmss, tap } from './theme';
 import { useHome } from './useHome';
 
-const DURATIONS = [
-  { min: 1, label: '1 min', color: '#38BDF8', icon: 'flash-outline' },
-  { min: 5, label: '5 min', color: '#06D6A0', icon: 'speedometer-outline' },
-  { min: 15, label: '15 min', color: '#FF9500', icon: 'time-outline' },
-  { min: 30, label: '30 min', color: '#EC4899', icon: 'hourglass-outline' },
-  { min: 60, label: '1 hour', color: '#8B5CF6', icon: 'timer-outline' },
-  { min: 120, label: '2 hours', color: '#3B82F6', icon: 'moon-outline' },
+const PRESETS = [
+  { min: 5, label: '5 min' },
+  { min: 15, label: '15 min' },
+  { min: 30, label: '30 min' },
+  { min: 60, label: '1 hr' },
+  { min: 120, label: '2 hr' },
 ];
 
-function CustomTimerModal({
+function CustomModal({
   visible,
-  channelName,
+  name,
   accentColor,
   onClose,
   onSet,
 }: {
   visible: boolean;
-  channelName: string;
+  name: string;
   accentColor: string;
   onClose: () => void;
   onSet: (minutes: number) => void;
 }) {
-  const { colors, isDark } = useHome();
-  const [mins, setMins] = useState(10);
+  const { colors } = useHome();
+  const [mins, setMins] = useState(15);
 
   if (!visible) return null;
 
@@ -37,21 +36,19 @@ function CustomTimerModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.modalOverlay}>
         <View style={[s.modalCard, { backgroundColor: colors.card, borderColor: colors.line }]}>
-          <View style={s.modalHeader}>
-            <View style={[s.modalIconWrap, { backgroundColor: `${accentColor}20` }]}>
-              <Ionicons name="timer" size={20} color={accentColor} />
-            </View>
-            <View style={{ flex: 1 }}>
+          {/* Header */}
+          <View style={s.modalHead}>
+            <View>
               <Text style={[s.modalTitle, { color: colors.text }]}>Custom Timer</Text>
-              <Text style={[s.modalSub, { color: colors.dim }]}>{channelName}</Text>
+              <Text style={[s.modalSub, { color: colors.dim }]}>{name}</Text>
             </View>
-            <Press onPress={onClose} style={s.modalCloseBtn}>
+            <Press onPress={onClose} style={s.closeBtn}>
               <Ionicons name="close" size={20} color={colors.dim} />
             </Press>
           </View>
 
-          {/* Stepper display */}
-          <View style={[s.stepperBox, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          {/* Stepper */}
+          <View style={[s.stepper, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <Press
               onPress={() => {
                 tap();
@@ -59,11 +56,11 @@ function CustomTimerModal({
               }}
               style={[s.stepBtn, { borderColor: colors.line }]}
             >
-              <Ionicons name="remove" size={22} color={colors.text} />
+              <Ionicons name="remove" size={20} color={colors.text} />
             </Press>
 
-            <View style={s.stepValueWrap}>
-              <Text style={[s.stepNumber, { color: accentColor }]}>{mins}</Text>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[s.stepNum, { color: colors.text }]}>{mins}</Text>
               <Text style={[s.stepUnit, { color: colors.dim }]}>minutes</Text>
             </View>
 
@@ -74,13 +71,13 @@ function CustomTimerModal({
               }}
               style={[s.stepBtn, { borderColor: colors.line }]}
             >
-              <Ionicons name="add" size={22} color={colors.text} />
+              <Ionicons name="add" size={20} color={colors.text} />
             </Press>
           </View>
 
-          {/* Quick preset adjusters */}
-          <View style={s.quickAdjustRow}>
-            {[1, 2, 10, 20, 45, 90].map((v) => (
+          {/* Quick choices */}
+          <View style={s.quickRow}>
+            {[1, 10, 20, 45, 90].map((v) => (
               <Press
                 key={v}
                 onPress={() => {
@@ -88,16 +85,16 @@ function CustomTimerModal({
                   setMins(v);
                 }}
                 style={[
-                  s.quickPill,
+                  s.quickChip,
                   {
-                    backgroundColor: mins === v ? `${accentColor}25` : colors.card,
+                    backgroundColor: mins === v ? `${accentColor}18` : colors.surface,
                     borderColor: mins === v ? accentColor : colors.line,
                   },
                 ]}
               >
                 <Text
                   style={[
-                    s.quickPillText,
+                    s.quickText,
                     { color: mins === v ? accentColor : colors.dim, fontWeight: mins === v ? '700' : '500' },
                   ]}
                 >
@@ -107,10 +104,10 @@ function CustomTimerModal({
             ))}
           </View>
 
-          {/* Actions */}
-          <View style={s.modalActionRow}>
-            <Press onPress={onClose} style={[s.modalCancelBtn, { borderColor: colors.line }]}>
-              <Text style={[s.modalCancelText, { color: colors.dim }]}>Cancel</Text>
+          {/* Confirm */}
+          <View style={s.modalBtnRow}>
+            <Press onPress={onClose} style={[s.cancelBtn, { borderColor: colors.line }]}>
+              <Text style={[s.cancelText, { color: colors.dim }]}>Cancel</Text>
             </Press>
             <Press
               onPress={() => {
@@ -118,10 +115,9 @@ function CustomTimerModal({
                 onSet(mins);
                 onClose();
               }}
-              style={[s.modalConfirmBtn, { backgroundColor: accentColor }]}
+              style={[s.startBtn, { backgroundColor: accentColor }]}
             >
-              <Ionicons name="play" size={15} color="#FFFFFF" />
-              <Text style={s.modalConfirmText}>Start {mins}m Timer</Text>
+              <Text style={s.startText}>Start {mins}m Timer</Text>
             </Press>
           </View>
         </View>
@@ -130,13 +126,7 @@ function CustomTimerModal({
   );
 }
 
-function TimerCard({
-  channel,
-  index,
-}: {
-  channel: (typeof CHANNELS)[number];
-  index: number;
-}) {
+function TimerCard({ channel, index }: { channel: (typeof CHANNELS)[number]; index: number }) {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
@@ -147,178 +137,124 @@ function TimerCard({
   const left = end ? Math.max(0, Math.round((end - h.now) / 1000)) : 0;
   const active = left > 0;
 
-  const [customModalOpen, setCustomModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const accentColor = isDark ? channel.color : channel.colorLight;
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(60 + index * 50).duration(240).easing(Easing.out(Easing.cubic))}
-      layout={LinearTransition.duration(220).easing(Easing.out(Easing.cubic))}
+      entering={FadeInDown.delay(50 + index * 40).duration(220).easing(Easing.out(Easing.cubic))}
+      layout={LinearTransition.duration(200)}
       style={[
         s.card,
         {
-          backgroundColor: active
-            ? isDark
-              ? channel.darkBgOn
-              : channel.lightBgOn
-            : colors.card,
-          borderColor: active
-            ? isDark
-              ? channel.darkBorderOn
-              : channel.lightBorderOn
-            : colors.line,
+          backgroundColor: colors.card,
+          borderColor: active ? (isDark ? channel.darkBorderOn : channel.lightBorderOn) : colors.line,
         },
       ]}
     >
-      {/* Header of Card */}
-      <View style={s.cardTop}>
-        <View style={s.channelTag}>
-          <View style={[s.tagDot, { backgroundColor: accentColor }]} />
-          <Text style={[s.name, { color: colors.text }]}>{h.names[id]}</Text>
-          <View
-            style={[
-              s.switchStatusPill,
-              {
-                backgroundColor: isOn ? `${accentColor}20` : colors.surface,
-                borderColor: isOn ? `${accentColor}40` : colors.line,
-              },
-            ]}
-          >
-            <Text style={[s.switchStatusText, { color: isOn ? accentColor : colors.dim }]}>
-              {isOn ? 'ON' : 'OFF'}
-            </Text>
+      {/* Top Header: Room & Name on Left, Single Clean Pill on Right */}
+      <View style={s.cardHead}>
+        <View style={s.titleWrap}>
+          <Text style={[s.roomLabel, { color: colors.dim }]}>{channel.room.toUpperCase()}</Text>
+          <Text style={[s.switchName, { color: colors.text }]}>{h.names[id]}</Text>
+        </View>
+
+        {active ? (
+          <View style={[s.pillActive, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}40` }]}>
+            <View style={[s.dotLive, { backgroundColor: accentColor }]} />
+            <Text style={[s.pillActiveText, { color: accentColor }]}>{mmss(left)} left</Text>
           </View>
-        </View>
-        <View
-          style={[
-            s.badge,
-            {
-              backgroundColor: active ? `${accentColor}22` : colors.surface,
-              borderColor: active ? accentColor : colors.line,
-            },
-          ]}
-        >
-          <Text style={[s.badgeText, { color: active ? accentColor : colors.dim }]}>
-            {active ? 'RUNNING' : 'IDLE'}
-          </Text>
-        </View>
+        ) : (
+          <View style={[s.pillIdle, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[s.dotIdle, { backgroundColor: isOn ? accentColor : colors.dimmer }]} />
+            <Text style={[s.pillIdleText, { color: colors.dim }]}>{isOn ? 'On' : 'Idle'}</Text>
+          </View>
+        )}
       </View>
 
+      {/* Body: Active Countdown OR Clean Preset Chips */}
       {active ? (
-        <Animated.View key="running" entering={FadeIn.duration(350)} style={s.runContainer}>
-          <View style={s.runRow}>
-            <Ring size={118} stroke={10} progress={left / total} color={accentColor} duration={900}>
-              <Text style={[s.time, { color: colors.text }]}>{mmss(left)}</Text>
+        <Animated.View key="running" entering={FadeIn.duration(250)} style={s.activeBody}>
+          <View style={s.activeRow}>
+            {/* Minimal Digital Ring */}
+            <Ring size={100} stroke={8} progress={left / total} color={accentColor} duration={900}>
+              <Text style={[s.countdownTime, { color: colors.text }]}>{mmss(left)}</Text>
             </Ring>
 
-            <View style={{ flex: 1, gap: 8 }}>
-              <Text style={[s.hint, { color: colors.dim }]}>Auto turns off when timer hits zero</Text>
+            {/* Clean Actions */}
+            <View style={s.activeActions}>
+              <Text style={[s.activeSub, { color: colors.dim }]}>Auto-stops when timer ends</Text>
 
-              {/* Quick Extend Buttons */}
-              <View style={s.extendRow}>
+              <View style={s.btnGroup}>
                 <Press
-                  style={[s.extendBtn, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}40` }]}
+                  style={[s.extendBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
                   onPress={() => {
                     tap();
                     h.extendTimer(id, 5);
                   }}
                 >
-                  <Ionicons name="add" size={13} color={accentColor} />
-                  <Text style={[s.extendBtnText, { color: accentColor }]}>+5m</Text>
+                  <Ionicons name="add" size={15} color={colors.text} />
+                  <Text style={[s.extendText, { color: colors.text }]}>+5 min</Text>
                 </Press>
 
                 <Press
-                  style={[s.extendBtn, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}40` }]}
-                  onPress={() => {
-                    tap();
-                    h.extendTimer(id, 15);
-                  }}
-                >
-                  <Ionicons name="add" size={13} color={accentColor} />
-                  <Text style={[s.extendBtnText, { color: accentColor }]}>+15m</Text>
-                </Press>
-              </View>
-
-              {/* Cancel / Stop Buttons */}
-              <View style={s.actionRow}>
-                <Press
-                  style={[s.cancel, { backgroundColor: `${colors.bad}15`, borderColor: colors.bad }]}
+                  style={[s.stopBtn, { backgroundColor: `${colors.bad}14`, borderColor: `${colors.bad}35` }]}
                   onPress={() => {
                     tap();
                     h.cancelTimer(id);
                   }}
                 >
-                  <Ionicons name="close-circle-outline" size={15} color={colors.bad} />
-                  <Text style={[s.cancelText, { color: colors.bad }]}>Cancel Timer</Text>
-                </Press>
-
-                <Press
-                  style={[s.turnOffBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => {
-                    tap();
-                    h.toggle(id);
-                  }}
-                >
-                  <Ionicons name="power" size={14} color={colors.dim} />
-                  <Text style={[s.turnOffText, { color: colors.dim }]}>Turn Off Now</Text>
+                  <Ionicons name="close" size={15} color={colors.bad} />
+                  <Text style={[s.stopText, { color: colors.bad }]}>Cancel</Text>
                 </Press>
               </View>
             </View>
           </View>
         </Animated.View>
       ) : (
-        <Animated.View key="picker" entering={FadeIn.duration(350)}>
-          <Text style={[s.hint, { color: colors.dim, marginBottom: 12 }]}>
-            Choose auto-off timer duration (turns switch ON and auto-stops)
-          </Text>
-          <View style={s.chips}>
-            {DURATIONS.map((d) => (
+        <Animated.View key="idle" entering={FadeIn.duration(250)} style={s.idleBody}>
+          <Text style={[s.sectionSub, { color: colors.dim }]}>QUICK TIMER</Text>
+
+          <View style={s.presetGrid}>
+            {PRESETS.map((p) => (
               <Press
-                key={d.min}
-                style={[
-                  s.chip,
-                  {
-                    backgroundColor: isDark ? `${d.color}15` : `${d.color}10`,
-                    borderColor: `${d.color}45`,
-                  },
-                ]}
+                key={p.min}
+                style={[s.presetChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
                 onPress={() => {
                   tap();
-                  h.startTimer(id, d.min);
+                  h.startTimer(id, p.min);
                 }}
               >
-                <Ionicons name={d.icon as any} size={15} color={d.color} />
-                <Text style={[s.chipText, { color: isDark ? '#FFFFFF' : d.color }]}>{d.label}</Text>
+                <Text style={[s.presetText, { color: colors.text }]}>{p.label}</Text>
               </Press>
             ))}
 
-            {/* Custom Minutes Chip */}
             <Press
               style={[
-                s.chip,
+                s.presetChip,
                 {
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9',
+                  backgroundColor: colors.surface,
                   borderColor: colors.line,
                 },
               ]}
               onPress={() => {
                 tap();
-                setCustomModalOpen(true);
+                setModalOpen(true);
               }}
             >
-              <Ionicons name="options-outline" size={15} color={colors.text} />
-              <Text style={[s.chipText, { color: colors.text }]}>Custom...</Text>
+              <Ionicons name="options-outline" size={14} color={colors.dim} />
+              <Text style={[s.presetText, { color: colors.dim }]}>Custom</Text>
             </Press>
           </View>
         </Animated.View>
       )}
 
-      {/* Custom Duration Selector Modal */}
-      <CustomTimerModal
-        visible={customModalOpen}
-        channelName={h.names[id]}
+      {/* Custom Timer Modal */}
+      <CustomModal
+        visible={modalOpen}
+        name={h.names[id]}
         accentColor={accentColor}
-        onClose={() => setCustomModalOpen(false)}
+        onClose={() => setModalOpen(false)}
         onSet={(m) => h.startTimer(id, m)}
       />
     </Animated.View>
@@ -328,7 +264,7 @@ function TimerCard({
 export default function Timers() {
   const { colors } = useHome();
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
       <Header
         title="Timers"
         sub="Auto-off countdowns for your switches"
@@ -344,164 +280,215 @@ export default function Timers() {
 }
 
 const s = StyleSheet.create({
-  list: { paddingHorizontal: 20, gap: 16 },
+  list: { paddingHorizontal: 20, gap: 14 },
   card: {
-    borderRadius: 28,
-    borderWidth: 1.5,
-    padding: 22,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 18,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
   },
-  cardTop: {
+  cardHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 14,
   },
-  channelTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  titleWrap: { gap: 2 },
+  roomLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
-  tagDot: { width: 8, height: 8, borderRadius: 4 },
-  name: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
-  switchStatusPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 8,
-    borderWidth: 1,
+  switchName: {
+    fontSize: 19,
+    fontWeight: '600',
+    letterSpacing: -0.3,
   },
-  switchStatusText: { fontSize: 10, fontWeight: '700' },
-  badge: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  hint: { fontSize: 13, lineHeight: 18 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
-  chip: {
+  pillActive: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
     borderWidth: 1,
   },
-  chipText: { fontSize: 14, fontWeight: '600' },
-  runContainer: { gap: 12 },
-  runRow: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  time: { fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  extendRow: { flexDirection: 'row', gap: 8 },
+  dotLive: { width: 6, height: 6, borderRadius: 3 },
+  pillActiveText: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  pillIdle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  dotIdle: { width: 6, height: 6, borderRadius: 3 },
+  pillIdleText: { fontSize: 12, fontWeight: '500' },
+
+  /* Idle Section */
+  idleBody: { gap: 8 },
+  sectionSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+  },
+  presetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  presetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 70,
+  },
+  presetText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  /* Active Section */
+  activeBody: { paddingTop: 4 },
+  activeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  countdownTime: {
+    fontSize: 20,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  activeActions: {
+    flex: 1,
+    gap: 10,
+  },
+  activeSub: {
+    fontSize: 12,
+  },
+  btnGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   extendBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  extendBtnText: { fontSize: 12, fontWeight: '700' },
-  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  cancel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
   },
-  cancelText: { fontSize: 12, fontWeight: '700' },
-  turnOffBtn: {
+  extendText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  stopBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
   },
-  turnOffText: { fontSize: 12, fontWeight: '600' },
+  stopText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
 
-  /* Custom Modal Styles */
+  /* Modal */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   modalCard: {
     width: '100%',
-    maxWidth: 380,
-    borderRadius: 28,
-    borderWidth: 1.5,
-    padding: 24,
-    gap: 20,
+    maxWidth: 340,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    gap: 16,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    elevation: 6,
   },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  modalIconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  modalHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
   modalTitle: { fontSize: 18, fontWeight: '700' },
   modalSub: { fontSize: 13, marginTop: 2 },
-  modalCloseBtn: { padding: 4 },
-  stepperBox: {
+  closeBtn: { padding: 4 },
+  stepper: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
   },
   stepBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepValueWrap: { alignItems: 'center' },
-  stepNumber: { fontSize: 36, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  stepUnit: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  quickAdjustRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  quickPill: {
+  stepNum: { fontSize: 32, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  stepUnit: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  quickRow: {
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+  },
+  quickChip: {
     paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: 11,
+    borderRadius: 10,
     borderWidth: 1,
   },
-  quickPillText: { fontSize: 13 },
-  modalActionRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  modalCancelBtn: {
+  quickText: { fontSize: 12 },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  cancelBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
     borderWidth: 1,
   },
-  modalCancelText: { fontSize: 15, fontWeight: '600' },
-  modalConfirmBtn: {
-    flex: 1.5,
-    flexDirection: 'row',
+  cancelText: { fontSize: 14, fontWeight: '600' },
+  startBtn: {
+    flex: 1.6,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
   },
-  modalConfirmText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  startText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 });

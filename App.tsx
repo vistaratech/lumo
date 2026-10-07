@@ -155,12 +155,12 @@ function Shell() {
 
   return (
     <Animated.View style={[s.fill, bg]}>
-      {/* Dynamic Multicolor Ambient Glow Orbs */}
+      {/* Ambient Glow Orbs */}
       <Animated.View pointerEvents="none" style={[s.orbA, orbA]}>
-        <Glow id="orb-a" size={540} color="#FF9500" opacity={h.isDark ? 0.45 : 0.22} />
+        <Glow id="orb-a" size={500} color="#FF9500" opacity={h.isDark ? 0.32 : 0.05} />
       </Animated.View>
       <Animated.View pointerEvents="none" style={[s.orbB, orbB]}>
-        <Glow id="orb-b" size={460} color="#06D6A0" opacity={h.isDark ? 0.35 : 0.18} />
+        <Glow id="orb-b" size={420} color="#06D6A0" opacity={h.isDark ? 0.25 : 0.04} />
       </Animated.View>
 
       {/* each page slides in from the side you're navigating towards */}
