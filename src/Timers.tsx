@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { CHANNELS } from './config';
 import { Header, Press, Ring, mmss, tap } from './theme';
@@ -34,8 +34,8 @@ function TimerCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(120 + index * 100).springify().damping(18)}
-      layout={LinearTransition.springify().damping(18)}
+      entering={FadeInDown.delay(60 + index * 50).duration(240).easing(Easing.out(Easing.cubic))}
+      layout={LinearTransition.duration(220).easing(Easing.out(Easing.cubic))}
       style={[
         s.card,
         {

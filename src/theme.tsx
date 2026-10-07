@@ -8,7 +8,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -221,7 +220,7 @@ export function Ring({
   );
 }
 
-/* ---------- spring-press wrapper ---------- */
+/* ---------- smooth-press wrapper ---------- */
 export function Press({
   onPress,
   disabled,
@@ -240,10 +239,10 @@ export function Press({
       disabled={disabled}
       onPress={onPress}
       onPressIn={() => {
-        sc.value = withSpring(0.95, { damping: 20, stiffness: 300 });
+        sc.value = withTiming(0.97, { duration: 90, easing: Easing.out(Easing.quad) });
       }}
       onPressOut={() => {
-        sc.value = withSpring(1, { damping: 12, stiffness: 200 });
+        sc.value = withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) });
       }}
     >
       <Animated.View style={[style, a, disabled && { opacity: 0.4 }]}>{children}</Animated.View>
@@ -269,7 +268,7 @@ export function Toggle({
   const pend = useSharedValue(0);
 
   useEffect(() => {
-    p.value = withSpring(value ? 1 : 0, { damping: 15, stiffness: 140 });
+    p.value = withTiming(value ? 1 : 0, { duration: 220, easing: Easing.out(Easing.cubic) });
   }, [value]);
 
   useEffect(() => {

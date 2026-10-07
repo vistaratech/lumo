@@ -247,7 +247,7 @@ export default function BluetoothModal({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
         <Animated.View
-          entering={FadeInDown.springify().damping(22)}
+          entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
           exiting={FadeOut.duration(150)}
           style={[
             s.dialog,

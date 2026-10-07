@@ -10,6 +10,7 @@
  */
 import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Web Bluetooth API type definitions
 export interface WebBluetoothDevice {
@@ -329,6 +330,7 @@ export async function connectNativeBleDevice(device: any): Promise<boolean> {
     }
 
     const devName = device.name || device.localName || 'Lumo-ESP32';
+    saveLastConnectedDevice(device.id, devName);
     notifyBleState(true, devName);
 
     // Fetch initial hardware status
@@ -342,6 +344,119 @@ export async function connectNativeBleDevice(device: any): Promise<boolean> {
     activeNativeDevice = null;
     return false;
   }
+}
+
+const LAST_BLE_KEY = 'lumo.last_ble_device';
+
+export async function saveLastConnectedDevice(id: string, name: string) {
+  try {
+    await AsyncStorage.setItem(LAST_BLE_KEY, JSON.stringify({ id, name }));
+  } catch {}
+}
+
+export async function clearLastConnectedDevice() {
+  try {
+    await AsyncStorage.removeItem(LAST_BLE_KEY);
+  } catch {}
+}
+
+let isAutoConnecting = false;
+
+/**
+ * Automatically reconnects to the previously paired ESP32 on app startup or foreground.
+ * Runs silently in the background without needing user interaction.
+ */
+export async function autoReconnectBle(): Promise<boolean> {
+  if (isBleConnected() || isAutoConnecting) return isBleConnected();
+  isAutoConnecting = true;
+
+  try {
+    const raw = await AsyncStorage.getItem(LAST_BLE_KEY);
+    if (!raw) {
+      isAutoConnecting = false;
+      return false;
+    }
+    const { id, name } = JSON.parse(raw);
+    if (!id) {
+      isAutoConnecting = false;
+      return false;
+    }
+
+    // ── Native Mobile (iOS / Android) ──
+    if (Platform.OS !== 'web') {
+      const manager = getBleManager();
+      if (!manager) {
+        isAutoConnecting = false;
+        return false;
+      }
+
+      const state = await manager.state();
+      if (state !== 'PoweredOn') {
+        isAutoConnecting = false;
+        return false;
+      }
+
+      console.log('[Native BLE] Auto-reconnecting to device:', id, name);
+      try {
+        const device = await manager.connectToDevice(id, { timeout: 6000, autoConnect: true });
+        const ok = await connectNativeBleDevice(device);
+        isAutoConnecting = false;
+        return ok;
+      } catch (directErr) {
+        // Fallback: targeted scan
+        return new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => {
+            manager.stopDeviceScan();
+            isAutoConnecting = false;
+            resolve(false);
+          }, 3500);
+
+          manager.startDeviceScan(null, { allowDuplicates: false }, async (err, device) => {
+            if (err || !device) return;
+            const devName = device.name || device.localName;
+            if (device.id === id || devName === 'Lumo-ESP32' || devName === name) {
+              clearTimeout(timeout);
+              manager.stopDeviceScan();
+              const ok = await connectNativeBleDevice(device);
+              isAutoConnecting = false;
+              resolve(ok);
+            }
+          });
+        });
+      }
+    }
+
+    // ── Web Bluetooth (Chrome / Edge getDevices) ──
+    if (Platform.OS === 'web' && navigator.bluetooth?.getDevices) {
+      try {
+        const devices = await navigator.bluetooth.getDevices();
+        const matching = devices.find((d) => d.id === id || d.name === name);
+        if (matching && matching.gatt) {
+          const server = await matching.gatt.connect();
+          if (server.connected) {
+            activeDevice = matching;
+            const service = await server.getPrimaryService(LUMO_SERVICE_UUID);
+            activeChar = await service.getCharacteristic(LUMO_CHAR_UUID);
+            try {
+              await activeChar.startNotifications();
+              activeChar.addEventListener('characteristicvaluechanged', (evt: any) => {
+                notifyBleData(new TextDecoder().decode(evt.target.value));
+              });
+            } catch {}
+            notifyBleState(true, matching.name || 'Lumo-ESP32');
+            sendBleCommand('STATUS').catch(() => {});
+            isAutoConnecting = false;
+            return true;
+          }
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('[BLE] Auto reconnect note:', err);
+  }
+
+  isAutoConnecting = false;
+  return false;
 }
 
 /**
@@ -403,6 +518,7 @@ export async function requestBluetoothDevice(): Promise<BluetoothDeviceInfo> {
           console.warn('[BLE] Service/Characteristic mapping note:', charErr);
         }
 
+        saveLastConnectedDevice(device.id, device.name || 'Lumo-ESP32');
         notifyBleState(true, device.name || 'Lumo-ESP32');
       } else {
         isConnected = true;
@@ -539,6 +655,7 @@ export async function disconnectBluetoothDevice(device?: any) {
     }
     activeChar = null;
     activeDevice = null;
+    clearLastConnectedDevice();
     notifyBleState(false);
   } catch (e) {
     console.warn('Disconnect error:', e);

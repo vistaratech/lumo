@@ -10,7 +10,6 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,7 +50,7 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
   const first = useRef(true);
 
   useEffect(() => {
-    p.value = reduce ? (on ? 1 : 0) : withSpring(on ? 1 : 0, { damping: 15, stiffness: 140 });
+    p.value = reduce ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 250, easing: Easing.out(Easing.cubic) });
     if (first.current) {
       first.current = false;
       return;
@@ -99,7 +98,7 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
   }));
 
   return (
-    <Animated.View entering={FadeInDown.delay(200 + index * 100).springify().damping(18)}>
+    <Animated.View entering={FadeInDown.delay(100 + index * 60).duration(260).easing(Easing.out(Easing.cubic))}>
       <Press
         disabled={!enabled}
         onPress={() => {
@@ -259,7 +258,7 @@ export default function Home() {
           <Ring size={108} stroke={9} progress={onCount / CHANNELS.length} color={onCount > 0 ? colors.lamp : colors.dim}>
             <Animated.Text
               key={onCount}
-              entering={ZoomIn.springify().damping(12)}
+              entering={ZoomIn.duration(200).easing(Easing.out(Easing.cubic))}
               style={[s.heroNum, { color: colors.text }]}
             >
               {onCount}

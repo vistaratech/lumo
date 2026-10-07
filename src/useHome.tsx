@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 import Paho from 'paho-mqtt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE, BROKER, CHANNELS } from './config';
 import { ThemeColors, ThemeMode, darkColors, feel, lightColors, notify } from './theme';
-import { addBleDataListener, addBleListener, isBleConnected, sendBleCommand } from './bluetooth';
+import { addBleDataListener, addBleListener, autoReconnectBle, isBleConnected, sendBleCommand } from './bluetooth';
 
 type Rec<T> = Record<number, T>;
 
@@ -39,6 +39,33 @@ type Ctx = {
 const HomeCtx = createContext<Ctx>({} as Ctx);
 export const useHome = () => useContext(HomeCtx);
 
+const TIMERS_STORAGE_KEY = 'lumo.active_timers';
+
+async function loadPersistedTimers(): Promise<Record<number, { end: number; total: number }>> {
+  try {
+    const raw = await AsyncStorage.getItem(TIMERS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function persistTimer(id: number, end: number, total: number) {
+  try {
+    const current = await loadPersistedTimers();
+    current[id] = { end, total };
+    await AsyncStorage.setItem(TIMERS_STORAGE_KEY, JSON.stringify(current));
+  } catch {}
+}
+
+async function clearPersistedTimer(id: number) {
+  try {
+    const current = await loadPersistedTimers();
+    delete current[id];
+    await AsyncStorage.setItem(TIMERS_STORAGE_KEY, JSON.stringify(current));
+  } catch {}
+}
+
 export function HomeProvider({ children }: { children: React.ReactNode }) {
   const systemColorScheme = useColorScheme();
   const client = useRef<Paho.Client | null>(null);
@@ -59,6 +86,65 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
 
   const [bleActive, setBleActive] = useState(isBleConnected());
   const [bleDeviceName, setBleDeviceName] = useState<string | null>(null);
+
+  /* Synchronize timers from storage (handles app restart or returning from background) */
+  const syncTimersFromStorage = async () => {
+    try {
+      const stored = await loadPersistedTimers();
+      const nowMs = Date.now();
+      let changed = false;
+      const newEnd: Rec<number | null> = {};
+      const newTotal: Rec<number> = {};
+      const newOn: Rec<boolean> = {};
+
+      for (const [idStr, data] of Object.entries(stored)) {
+        const id = Number(idStr);
+        if (data && data.end > nowMs) {
+          // Timer is still counting down
+          newEnd[id] = data.end;
+          newTotal[id] = data.total;
+          newOn[id] = true;
+          onRef.current[id] = true;
+        } else {
+          // Timer finished while app was backgrounded/closed
+          delete stored[id];
+          changed = true;
+          newEnd[id] = null;
+          newTotal[id] = 0;
+          newOn[id] = false;
+          onRef.current[id] = false;
+        }
+      }
+
+      if (changed) {
+        await AsyncStorage.setItem(TIMERS_STORAGE_KEY, JSON.stringify(stored));
+      }
+
+      if (Object.keys(newEnd).length > 0) {
+        setTimerEnd((s) => ({ ...s, ...newEnd }));
+        setTimerTotal((s) => ({ ...s, ...newTotal }));
+        setOn((s) => ({ ...s, ...newOn }));
+      }
+    } catch (err) {
+      console.warn('[Home] Failed to sync timers:', err);
+    }
+  };
+
+  /* Auto-reconnect Bluetooth and sync timers on launch & whenever app returns to foreground */
+  useEffect(() => {
+    autoReconnectBle().catch(() => {});
+    syncTimersFromStorage();
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        console.log('[Home] Foreground active: auto-reconnecting BLE and syncing timers');
+        autoReconnectBle().catch(() => {});
+        syncTimersFromStorage();
+      }
+    });
+
+    return () => sub.remove();
+  }, []);
 
   /* Listen to real Bluetooth connection state and live notifications from ESP32 */
   useEffect(() => {
@@ -98,7 +184,31 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
 
   /* clock: 1s while a timer runs, otherwise 20s */
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), anyTimer ? 1000 : 20000);
+    const t = setInterval(() => {
+      const currentNow = Date.now();
+      setNow(currentNow);
+
+      // Check if any active timer just finished
+      setTimerEnd((currentTimers) => {
+        let hasExpired = false;
+        const updated = { ...currentTimers };
+
+        for (const [idStr, end] of Object.entries(currentTimers)) {
+          const id = Number(idStr);
+          if (end && currentNow >= end) {
+            hasExpired = true;
+            updated[id] = null;
+            clearPersistedTimer(id);
+            onRef.current[id] = false;
+            setOn((s) => ({ ...s, [id]: false }));
+            setSince((s) => ({ ...s, [id]: null }));
+          }
+        }
+
+        return hasExpired ? updated : currentTimers;
+      });
+    }, anyTimer ? 1000 : 20000);
+
     return () => clearInterval(t);
   }, [anyTimer]);
 
@@ -236,6 +346,13 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     setOn((s) => ({ ...s, [id]: value }));
     setSince((s) => ({ ...s, [id]: value ? Date.now() : null }));
 
+    // If relay turned off, clear any active timer
+    if (!value) {
+      setTimerEnd((s) => ({ ...s, [id]: null }));
+      setTimerTotal((s) => ({ ...s, [id]: 0 }));
+      clearPersistedTimer(id);
+    }
+
     // 2. Send via Bluetooth BLE if connected
     sendBleCommand(`R${id}_${value ? 'ON' : 'OFF'}`).catch(() => {});
 
@@ -251,9 +368,14 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const startTimer = (id: number, minutes: number) => {
+    const targetEnd = Date.now() + minutes * 60 * 1000;
+    const totalSecs = minutes * 60;
+
     sendBleCommand(`TIMER:${id}:${minutes}`).catch(() => {});
-    setTimerTotal((s) => ({ ...s, [id]: minutes * 60 }));
-    setTimerEnd((s) => ({ ...s, [id]: Date.now() + minutes * 60 * 1000 }));
+    setTimerTotal((s) => ({ ...s, [id]: totalSecs }));
+    setTimerEnd((s) => ({ ...s, [id]: targetEnd }));
+    persistTimer(id, targetEnd, totalSecs);
+
     onRef.current[id] = true;
     setOn((s) => ({ ...s, [id]: true }));
 
@@ -294,6 +416,9 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     cancelTimer: (id) => {
       sendBleCommand(`TIMER:${id}:0`).catch(() => {});
       pub(`${BASE}/relay${id}/timer/set`, '0');
+      setTimerEnd((s) => ({ ...s, [id]: null }));
+      setTimerTotal((s) => ({ ...s, [id]: 0 }));
+      clearPersistedTimer(id);
     },
     reconnect: () => {
       try {

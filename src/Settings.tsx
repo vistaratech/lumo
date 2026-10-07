@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, {
+  Easing,
   FadeInDown,
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,7 +38,7 @@ function Section({
   colors: ThemeColors;
 }) {
   return (
-    <Animated.View entering={FadeInDown.delay(100 + i * 80).springify().damping(18)} style={s.section}>
+    <Animated.View entering={FadeInDown.delay(60 + i * 50).duration(240).easing(Easing.out(Easing.cubic))} style={s.section}>
       <View style={s.sectionHeaderRow}>
         <View style={[s.sectionIconBadge, { backgroundColor: `${iconColor}22` }]}>
           <Ionicons name={icon} size={14} color={iconColor} />
@@ -67,7 +67,7 @@ function ThemeSegmentControl({
   const x = useSharedValue(activeIdx * itemW);
 
   React.useEffect(() => {
-    x.value = withSpring(activeIdx * itemW, { damping: 18, stiffness: 200 });
+    x.value = withTiming(activeIdx * itemW, { duration: 220, easing: Easing.out(Easing.cubic) });
   }, [activeIdx, itemW]);
 
   const pillStyle = useAnimatedStyle(() => ({

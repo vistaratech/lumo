@@ -10,7 +10,6 @@ import Animated, {
   useSharedValue,
   withDelay,
   withRepeat,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -34,7 +33,7 @@ export default function Splash({ onFinish }: { onFinish: () => void }) {
   useEffect(() => {
     // 1) house outline is drawn, 2) bulb lights up, 3) progress bar sweeps smoothly
     draw.value = withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.cubic) });
-    lamp.value = withDelay(950, withSpring(1, { damping: 8, stiffness: 120 }));
+    lamp.value = withDelay(950, withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) }));
     sweep.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.quad) }), -1, false);
 
     const a = setTimeout(() => setMinDone(true), 1100);
