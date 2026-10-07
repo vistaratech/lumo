@@ -8,6 +8,12 @@ import { addBleDataListener, addBleListener, autoReconnectBle, isBleConnected, s
 
 type Rec<T> = Record<number, T>;
 
+export interface ScannedWifi {
+  ssid: string;
+  rssi: number;
+  locked: boolean;
+}
+
 type Ctx = {
   brokerUp: boolean;
   deviceUp: boolean;
@@ -29,6 +35,8 @@ type Ctx = {
   wifiStatus: 'connected' | 'connecting' | 'failed' | 'disconnected' | 'unknown';
   wifiSsid: string | null;
   wifiIp: string | null;
+  scannedWifiList: ScannedWifi[];
+  isScanningWifi: boolean;
   setName: (id: number, name: string) => void;
   setHaptics: (v: boolean) => void;
   setThemeMode: (mode: ThemeMode) => void;
@@ -40,6 +48,7 @@ type Ctx = {
   configureWifi: (ssid: string, pass: string) => Promise<boolean>;
   clearWifi: () => Promise<boolean>;
   refreshWifi: () => void;
+  scanWifi: () => void;
 };
 
 const HomeCtx = createContext<Ctx>({} as Ctx);
@@ -96,6 +105,10 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   const [wifiStatus, setWifiStatus] = useState<'connected' | 'connecting' | 'failed' | 'disconnected' | 'unknown'>('unknown');
   const [wifiSsid, setWifiSsid] = useState<string | null>(null);
   const [wifiIp, setWifiIp] = useState<string | null>(null);
+
+  const [scannedWifiList, setScannedWifiList] = useState<ScannedWifi[]>([]);
+  const [isScanningWifi, setIsScanningWifi] = useState(false);
+  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Load cached Wi-Fi SSID from storage */
   useEffect(() => {
@@ -216,6 +229,32 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       } else if (msg.startsWith('WIFI_STATE:DISCONNECTED') || msg.startsWith('WIFI_STATE:CLEARED')) {
         setWifiStatus('disconnected');
         setWifiIp(null);
+      }
+
+      // Parse scanned Wi-Fi network items from ESP32
+      if (msg.startsWith('WIFI_NET:')) {
+        const parts = msg.split(':');
+        // Format: WIFI_NET:<ssid>:<rssi>:<locked>
+        if (parts.length >= 4) {
+          const netSsid = parts[1];
+          const rssi = parseInt(parts[2], 10) || -70;
+          const locked = parts[3] === '1';
+
+          if (netSsid && netSsid.trim().length > 0) {
+            setScannedWifiList((prev) => {
+              const existingIdx = prev.findIndex((item) => item.ssid === netSsid);
+              if (existingIdx !== -1) {
+                const copy = [...prev];
+                copy[existingIdx] = { ssid: netSsid, rssi, locked };
+                return copy;
+              }
+              return [...prev, { ssid: netSsid, rssi, locked }].sort((a, b) => b.rssi - a.rssi);
+            });
+          }
+        }
+      } else if (msg.startsWith('WIFI_SCAN_END') || msg.startsWith('WIFI_SCAN_EMPTY')) {
+        setIsScanningWifi(false);
+        if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
       }
     });
 
@@ -414,6 +453,18 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     sendBleCommand('GET_WIFI').catch(() => {});
   };
 
+  const scanWifi = () => {
+    if (!bleActive) return;
+    setIsScanningWifi(true);
+    setScannedWifiList([]);
+    sendBleCommand('SCAN_WIFI').catch(() => {});
+
+    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+    scanTimeoutRef.current = setTimeout(() => {
+      setIsScanningWifi(false);
+    }, 12000);
+  };
+
   const send = (id: number, value: boolean) => {
     // 1. Immediately update local ref and React state so toggle is instant and accurate
     onRef.current[id] = value;
@@ -479,6 +530,8 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     wifiStatus,
     wifiSsid,
     wifiIp,
+    scannedWifiList,
+    isScanningWifi,
     setName,
     setHaptics,
     setThemeMode,
@@ -509,6 +562,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     configureWifi,
     clearWifi,
     refreshWifi,
+    scanWifi,
   };
 
   return <HomeCtx.Provider value={value}>{children}</HomeCtx.Provider>;

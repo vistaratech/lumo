@@ -162,6 +162,53 @@ void startWifiConnection(String ssid, String pass) {
   notifyBle("WIFI_STATE:CONNECTING:" + savedSsid);
 }
 
+// ── Perform Wi-Fi Scan for Nearby 2.4 GHz Networks ────────────────────────
+void performWifiScan() {
+  Serial.println("[WiFi] Scanning nearby 2.4 GHz networks...");
+
+  WiFi.mode(WIFI_STA);
+  int n = WiFi.scanNetworks(false, false);
+
+  if (n <= 0) {
+    Serial.println("[WiFi] No networks found");
+    notifyBle("WIFI_SCAN_EMPTY");
+    WiFi.scanDelete();
+    return;
+  }
+
+  Serial.println("[WiFi] Scan found " + String(n) + " networks");
+
+  String reported[25];
+  int reportedCount = 0;
+
+  for (int i = 0; i < n && reportedCount < 20; i++) {
+    String netSsid = WiFi.SSID(i);
+    netSsid.trim();
+    if (netSsid.length() == 0) continue;
+
+    bool alreadyReported = false;
+    for (int j = 0; j < reportedCount; j++) {
+      if (reported[j] == netSsid) {
+        alreadyReported = true;
+        break;
+      }
+    }
+    if (alreadyReported) continue;
+
+    reported[reportedCount++] = netSsid;
+    int rssi = WiFi.RSSI(i);
+    bool locked = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+
+    String netMsg = "WIFI_NET:" + netSsid + ":" + String(rssi) + ":" + (locked ? "1" : "0");
+    delay(40);
+    notifyBle(netMsg);
+  }
+
+  delay(40);
+  notifyBle("WIFI_SCAN_END");
+  WiFi.scanDelete();
+}
+
 // ── Central Command Handler (Called by BLE and MQTT) ──────────────────────
 void processCommand(String rawCmd) {
   rawCmd.trim();
@@ -169,7 +216,11 @@ void processCommand(String rawCmd) {
   cmd.toUpperCase();
 
   // ── Wi-Fi Configuration Commands ──
-  if (rawCmd.startsWith("SET_WIFI:") || rawCmd.startsWith("set_wifi:")) {
+  if (cmd == "SCAN_WIFI") {
+    performWifiScan();
+    return;
+  }
+  else if (rawCmd.startsWith("SET_WIFI:") || rawCmd.startsWith("set_wifi:")) {
     int firstColon = rawCmd.indexOf(':');
     int secondColon = rawCmd.indexOf(':', firstColon + 1);
     if (firstColon != -1 && secondColon != -1) {
