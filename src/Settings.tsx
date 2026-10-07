@@ -20,6 +20,33 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: any; color: string 
   { mode: 'system', label: 'System', icon: 'phone-portrait-outline', color: '#06D6A0' },
 ];
 
+const CHANGELOG_V15 = [
+  {
+    icon: 'bluetooth-outline',
+    color: '#0084FF',
+    title: 'Silent Bluetooth Auto-Reconnect',
+    desc: 'Automatically reconnects to your ESP32 in the background whenever you reopen the app or switch back.',
+  },
+  {
+    icon: 'timer-outline',
+    color: '#EC4899',
+    title: 'Persistent Smart Timers',
+    desc: 'Countdown timers now survive app kills, backgrounds, and restarts with millisecond timestamp sync.',
+  },
+  {
+    icon: 'sparkles-outline',
+    color: '#8B5CF6',
+    title: 'Smooth Apple-Style Motion',
+    desc: 'Removed jumping/bouncing spring physics. Switches, cards, and sheets now glide with silky cubic easing.',
+  },
+  {
+    icon: 'flash-outline',
+    color: '#06D6A0',
+    title: 'Zero Latency BLE Response',
+    desc: 'Direct CoreBluetooth GATT dispatch eliminates relay toggle lag for instant hardware response.',
+  },
+];
+
 function Section({
   i,
   title,
@@ -320,9 +347,56 @@ export default function Settings() {
         </Press>
       </Section>
 
-      {/* System Status Section with Interactive Bluetooth Discovery */}
+      {/* What's New in v1.5 Section */}
       <Section
         i={3}
+        title="WHAT'S NEW IN V1.5"
+        icon="sparkles"
+        iconColor="#F59E0B"
+        dimColor={colors.dim}
+        colors={colors}
+      >
+        <View
+          style={[
+            s.whatsNewCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.line,
+            },
+          ]}
+        >
+          <View
+            style={[
+              s.versionHeaderRow,
+              { borderBottomColor: colors.line },
+            ]}
+          >
+            <View style={[s.versionBadge, { backgroundColor: '#F59E0B22' }]}>
+              <Ionicons name="rocket-outline" size={13} color="#F59E0B" />
+              <Text style={[s.versionBadgeText, { color: '#F59E0B' }]}>v1.5 Release</Text>
+            </View>
+            <Text style={[s.buildDateText, { color: colors.dim }]}>Latest Stable Update</Text>
+          </View>
+
+          <View style={s.changelogList}>
+            {CHANGELOG_V15.map((item, idx) => (
+              <View key={idx} style={s.changelogItem}>
+                <View style={[s.changelogIconBox, { backgroundColor: `${item.color}18` }]}>
+                  <Ionicons name={item.icon as any} size={15} color={item.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.changelogTitle, { color: colors.text }]}>{item.title}</Text>
+                  <Text style={[s.changelogDesc, { color: colors.dim }]}>{item.desc}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </Section>
+
+      {/* System Status Section with Interactive Bluetooth Discovery */}
+      <Section
+        i={4}
         title="SYSTEM STATUS"
         icon="shield-checkmark"
         iconColor="#06D6A0"
@@ -409,10 +483,11 @@ export default function Settings() {
         />
 
         <StatusRow
-          icon="information-circle-outline"
+          icon="sparkles-outline"
           iconColor="#A855F7"
           label="App Version"
-          value="Lumo 1.0.0"
+          value="v1.5 (Build 1.5.0)"
+          valueColor="#A855F7"
           cardBg={colors.card}
           lineColor={colors.line}
           textColor={colors.text}
@@ -520,4 +595,64 @@ const s = StyleSheet.create({
   },
   rowLabel: { fontSize: 15, fontWeight: '600' },
   rowValue: { fontSize: 14, maxWidth: '50%' },
+  whatsNewCard: {
+    borderWidth: 1.5,
+    borderRadius: 22,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  versionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  versionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  versionBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  buildDateText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  changelogList: {
+    gap: 14,
+  },
+  changelogItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  changelogIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  changelogTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  changelogDesc: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
 });
