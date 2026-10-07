@@ -9,7 +9,6 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withRepeat,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,10 +34,10 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
   const id = channel.id;
   const on = !!h.on[id];
   const pending = !!h.pending[id];
-  const enabled = h.ready;
   const end = h.timerEnd[id];
   const left = end ? Math.max(0, Math.round((end - h.now) / 1000)) : 0;
-  const detail = left > 0 ? `Turns off in ${mmss(left)}` : sinceLabel(h.since[id] ?? null, h.now);
+  const timerActive = left > 0;
+  const detail = timerActive ? `Auto-off in ${mmss(left)}` : sinceLabel(h.since[id] ?? null, h.now);
 
   const accentColor = isDark ? channel.color : channel.colorLight;
   const cardBgOn = isDark ? channel.darkBgOn : channel.lightBgOn;
@@ -47,7 +46,6 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
   const p = useSharedValue(on ? 1 : 0);
   const burst = useSharedValue(1);
   const breathe = useSharedValue(0);
-  const en = useSharedValue(enabled ? 1 : 0);
   const first = useRef(true);
 
   useEffect(() => {
@@ -71,14 +69,10 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
     }
   }, [on, reduce]);
 
-  useEffect(() => {
-    en.value = withTiming(enabled ? 1 : 0, { duration: 300 });
-  }, [enabled]);
-
   const card = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(p.value, [0, 1], [colors.card, cardBgOn]),
     borderColor: interpolateColor(p.value, [0, 1], [colors.line, cardBorderOn]),
-    opacity: 0.45 + 0.55 * en.value,
+    opacity: 1, // Keep fully interactive and bright at all times
     transform: [{ scale: 1 + 0.012 * breathe.value }],
   }));
 
@@ -101,7 +95,6 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
   return (
     <Animated.View entering={FadeInDown.delay(100 + index * 60).duration(260).easing(Easing.out(Easing.cubic))}>
       <Press
-        disabled={!enabled}
         onPress={() => {
           tap();
           h.toggle(id);
@@ -113,7 +106,7 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
             <Glow id={`tile-glow-${id}`} size={300} color={channel.glow} opacity={isDark ? 0.5 : 0.28} />
           </Animated.View>
 
-          {/* Top Row: Icon Badge + Live Wattage + Toggle */}
+          {/* Top Row: Icon Badge + Badges + Toggle */}
           <View style={s.tileTop}>
             <View
               style={[
@@ -133,19 +126,28 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
               </Animated.View>
             </View>
 
-            {/* Live Status Pill & Toggle */}
+            {/* Badges & Live Toggle */}
             <View style={s.topRight}>
-              {on && (
+              {/* Active Timer Pill */}
+              {timerActive && (
+                <View style={[s.timerBadge, { backgroundColor: `${accentColor}20`, borderColor: `${accentColor}50` }]}>
+                  <Ionicons name="timer" size={12} color={accentColor} />
+                  <Text style={[s.timerBadgeText, { color: accentColor }]}>{mmss(left)}</Text>
+                </View>
+              )}
+
+              {on && !timerActive && (
                 <View style={[s.liveBadge, { backgroundColor: `${accentColor}1C`, borderColor: `${accentColor}40` }]}>
                   <Ionicons name="pulse" size={12} color={accentColor} />
                   <Text style={[s.liveBadgeText, { color: accentColor }]}>LIVE</Text>
                 </View>
               )}
+
               <Toggle value={on} pending={pending} colors={colors} activeColor={accentColor} />
             </View>
           </View>
 
-          {/* Bottom Row: Info */}
+          {/* Bottom Row: Room & Channel Nickname */}
           <View>
             <View style={s.roomRow}>
               <View style={[s.roomDot, { backgroundColor: on ? accentColor : colors.dim }]} />
@@ -154,7 +156,7 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
             <Text style={[s.tileName, { color: colors.text }]}>{h.names[id]}</Text>
             <View style={s.statusRow}>
               <Ionicons
-                name={pending ? 'sync-outline' : on ? 'checkmark-circle' : 'power-outline'}
+                name={pending ? 'sync-outline' : timerActive ? 'timer-outline' : on ? 'checkmark-circle' : 'power-outline'}
                 size={14}
                 color={on ? accentColor : colors.dim}
               />
@@ -177,10 +179,12 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
 
 function ConnectButton({
   ready,
+  bleActive,
   isDark,
   onPress,
 }: {
   ready: boolean;
+  bleActive: boolean;
   isDark: boolean;
   onPress: () => void;
 }) {
@@ -356,7 +360,7 @@ export default function Home() {
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
-      {/* Top Header Bar with Exact Matching Typography from Timers & Settings */}
+      {/* Top Header Bar */}
       <Animated.View entering={FadeInDown.duration(450)} style={s.top}>
         <View style={{ flex: 1, paddingRight: 8 }}>
           <Text style={[s.headerTitle, { color: colors.text }]}>Home</Text>
@@ -378,6 +382,7 @@ export default function Home() {
           />
           <ConnectButton
             ready={h.ready}
+            bleActive={h.bleActive}
             isDark={isDark}
             onPress={() => {
               tap();
@@ -425,13 +430,12 @@ export default function Home() {
               {onCount === 0 ? 'All Devices Off' : onCount === CHANNELS.length ? 'Full Illumination' : `${onCount} Active Device${onCount > 1 ? 's' : ''}`}
             </Text>
             <Text style={[s.heroSub, { color: colors.dim }]}>
-              {!h.ready ? 'Connecting to your switches...' : onCount === 0 ? 'Tap below to activate' : 'System running smoothly'}
+              {!h.ready ? 'Connecting to controller...' : onCount === 0 ? 'Tap below to activate' : 'System running smoothly'}
             </Text>
 
             {/* Quick Action Buttons */}
             <View style={s.heroBtnRow}>
               <Press
-                disabled={!h.ready}
                 onPress={() => {
                   tap();
                   h.allSet(true);
@@ -456,7 +460,6 @@ export default function Home() {
               </Press>
 
               <Press
-                disabled={!h.ready}
                 onPress={() => {
                   tap();
                   h.allSet(false);
@@ -482,39 +485,51 @@ export default function Home() {
         <Text style={[s.sectionTitle, { color: colors.dim }]}>QUICK SCENES</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scenesRow}>
           <Press
-            disabled={!h.ready}
             onPress={() => {
               tap();
               h.allSet(false);
             }}
             style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
           >
-            <Ionicons name="moon-outline" size={15} color="#8B5CF6" />
-            <Text style={[s.sceneChipText, { color: colors.text }]}>Cinema Mode</Text>
+            <Ionicons name="power" size={15} color="#F43F5E" />
+            <Text style={[s.sceneChipText, { color: colors.text }]}>All Off</Text>
           </Press>
 
           <Press
-            disabled={!h.ready}
             onPress={() => {
               tap();
-              if (!h.on[1]) h.toggle(1);
+              h.allSet(true);
             }}
             style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
           >
-            <Ionicons name="sunny-outline" size={15} color="#FF9500" />
-            <Text style={[s.sceneChipText, { color: colors.text }]}>Living Glow</Text>
+            <Ionicons name="sunny" size={15} color="#FF9500" />
+            <Text style={[s.sceneChipText, { color: colors.text }]}>Full Light</Text>
           </Press>
 
           <Press
-            disabled={!h.ready}
             onPress={() => {
               tap();
-              if (!h.on[2]) h.toggle(2);
+              // Night Comfort: Turn off Switch 1, turn on Switch 2 with 30m timer
+              h.toggle(1);
+              if (h.on[1]) h.send(1, false);
+              h.startTimer(2, 30);
             }}
             style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
           >
             <Ionicons name="bed-outline" size={15} color="#06D6A0" />
-            <Text style={[s.sceneChipText, { color: colors.text }]}>Night Comfort</Text>
+            <Text style={[s.sceneChipText, { color: colors.text }]}>Night (30m)</Text>
+          </Press>
+
+          <Press
+            onPress={() => {
+              tap();
+              // Focus: Switch 1 with 45m timer
+              h.startTimer(1, 45);
+            }}
+            style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
+          >
+            <Ionicons name="book-outline" size={15} color="#8B5CF6" />
+            <Text style={[s.sceneChipText, { color: colors.text }]}>Focus (45m)</Text>
           </Press>
         </ScrollView>
       </Animated.View>
@@ -728,6 +743,16 @@ const s = StyleSheet.create({
   tileGlow: { position: 'absolute', left: -70, top: -70 },
   tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  timerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  timerBadgeText: { fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'] },
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',

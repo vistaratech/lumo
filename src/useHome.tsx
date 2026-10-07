@@ -41,6 +41,7 @@ type Ctx = {
   setHaptics: (v: boolean) => void;
   setThemeMode: (mode: ThemeMode) => void;
   toggle: (id: number) => void;
+  send: (id: number, value: boolean) => void;
   allSet: (value: boolean) => void;
   startTimer: (id: number, minutes: number) => void;
   cancelTimer: (id: number) => void;
@@ -49,12 +50,15 @@ type Ctx = {
   clearWifi: () => Promise<boolean>;
   refreshWifi: () => void;
   scanWifi: () => void;
+  extendTimer: (id: number, minutes: number) => void;
 };
 
 const HomeCtx = createContext<Ctx>({} as Ctx);
 export const useHome = () => useContext(HomeCtx);
 
 const TIMERS_STORAGE_KEY = 'lumo.active_timers';
+const RELAYS_STORAGE_KEY = 'lumo.relay_states';
+const RELAYS_SINCE_KEY = 'lumo.relay_since';
 
 async function loadPersistedTimers(): Promise<Record<number, { end: number; total: number }>> {
   try {
@@ -78,6 +82,30 @@ async function clearPersistedTimer(id: number) {
     const current = await loadPersistedTimers();
     delete current[id];
     await AsyncStorage.setItem(TIMERS_STORAGE_KEY, JSON.stringify(current));
+  } catch {}
+}
+
+async function loadPersistedRelayStates(): Promise<{ on: Rec<boolean>; since: Rec<number | null> }> {
+  try {
+    const [rawOn, rawSince] = await Promise.all([
+      AsyncStorage.getItem(RELAYS_STORAGE_KEY),
+      AsyncStorage.getItem(RELAYS_SINCE_KEY),
+    ]);
+    return {
+      on: rawOn ? JSON.parse(rawOn) : {},
+      since: rawSince ? JSON.parse(rawSince) : {},
+    };
+  } catch {
+    return { on: {}, since: {} };
+  }
+}
+
+async function persistRelayStates(on: Rec<boolean>, since?: Rec<number | null>) {
+  try {
+    await AsyncStorage.setItem(RELAYS_STORAGE_KEY, JSON.stringify(on));
+    if (since) {
+      await AsyncStorage.setItem(RELAYS_SINCE_KEY, JSON.stringify(since));
+    }
   } catch {}
 }
 
@@ -119,7 +147,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
-  /* Synchronize timers from storage (handles app restart or returning from background) */
+  /* Synchronize timers and relay states from storage (handles app restart or returning from background) */
   const syncTimersFromStorage = async () => {
     try {
       const stored = await loadPersistedTimers();
@@ -127,7 +155,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       let changed = false;
       const newEnd: Rec<number | null> = {};
       const newTotal: Rec<number> = {};
-      const newOn: Rec<boolean> = {};
+      const currentOn = { ...onRef.current };
 
       for (const [idStr, data] of Object.entries(stored)) {
         const id = Number(idStr);
@@ -135,7 +163,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
           // Timer is still counting down
           newEnd[id] = data.end;
           newTotal[id] = data.total;
-          newOn[id] = true;
+          currentOn[id] = true;
           onRef.current[id] = true;
         } else {
           // Timer finished while app was backgrounded/closed
@@ -143,8 +171,11 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
           changed = true;
           newEnd[id] = null;
           newTotal[id] = 0;
-          newOn[id] = false;
+          currentOn[id] = false;
           onRef.current[id] = false;
+          // Send OFF command in case device needs cleanup
+          sendBleCommand(`R${id}_OFF`).catch(() => {});
+          sendBleCommand(`TIMER:${id}:0`).catch(() => {});
         }
       }
 
@@ -152,26 +183,46 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.setItem(TIMERS_STORAGE_KEY, JSON.stringify(stored));
       }
 
-      if (Object.keys(newEnd).length > 0) {
-        setTimerEnd((s) => ({ ...s, ...newEnd }));
-        setTimerTotal((s) => ({ ...s, ...newTotal }));
-        setOn((s) => ({ ...s, ...newOn }));
-      }
+      setTimerEnd((s) => ({ ...s, ...newEnd }));
+      setTimerTotal((s) => ({ ...s, ...newTotal }));
+      setOn((s) => ({ ...s, ...currentOn }));
+      persistRelayStates(currentOn);
     } catch (err) {
       console.warn('[Home] Failed to sync timers:', err);
     }
   };
 
-  /* Auto-reconnect Bluetooth and sync timers on launch & whenever app returns to foreground */
+  /* Initial load: immediately restore saved relay states & timers from phone storage (zero flicker/reset) */
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await loadPersistedRelayStates();
+        if (saved.on && Object.keys(saved.on).length > 0) {
+          onRef.current = { ...saved.on };
+          setOn(saved.on);
+        }
+        if (saved.since && Object.keys(saved.since).length > 0) {
+          setSince(saved.since);
+        }
+      } catch {}
+      await syncTimersFromStorage();
+    })();
+  }, []);
+
+  /* Auto-reconnect Bluetooth and sync hardware state on launch & whenever app returns to foreground */
   useEffect(() => {
     autoReconnectBle().catch(() => {});
-    syncTimersFromStorage();
 
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        console.log('[Home] Foreground active: auto-reconnecting BLE and syncing timers');
+        console.log('[Home] Foreground active: auto-reconnecting BLE and syncing states');
         autoReconnectBle().catch(() => {});
         syncTimersFromStorage();
+        // Request fresh physical status from ESP32 immediately
+        setTimeout(() => {
+          sendBleCommand('STATUS').catch(() => {});
+          sendBleCommand('GET_WIFI').catch(() => {});
+        }, 150);
       }
     });
 
@@ -197,15 +248,69 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       if (m1) {
         const val = m1[1] === '1';
         onRef.current[1] = val;
-        setOn((s) => ({ ...s, 1: val }));
-        setSince((s) => ({ ...s, 1: val ? s[1] ?? Date.now() : null }));
+        setOn((s) => {
+          const next = { ...s, 1: val };
+          persistRelayStates(next);
+          return next;
+        });
+        setSince((s) => {
+          const next = { ...s, 1: val ? s[1] ?? Date.now() : null };
+          persistRelayStates(onRef.current, next);
+          return next;
+        });
+        if (!val) {
+          setTimerEnd((s) => ({ ...s, 1: null }));
+          setTimerTotal((s) => ({ ...s, 1: 0 }));
+          clearPersistedTimer(1);
+        }
       }
       const m2 = msg.match(/R2:([01])/);
       if (m2) {
         const val = m2[1] === '1';
         onRef.current[2] = val;
-        setOn((s) => ({ ...s, 2: val }));
-        setSince((s) => ({ ...s, 2: val ? s[2] ?? Date.now() : null }));
+        setOn((s) => {
+          const next = { ...s, 2: val };
+          persistRelayStates(next);
+          return next;
+        });
+        setSince((s) => {
+          const next = { ...s, 2: val ? s[2] ?? Date.now() : null };
+          persistRelayStates(onRef.current, next);
+          return next;
+        });
+        if (!val) {
+          setTimerEnd((s) => ({ ...s, 2: null }));
+          setTimerTotal((s) => ({ ...s, 2: 0 }));
+          clearPersistedTimer(2);
+        }
+      }
+
+      // Live timer countdown from hardware: T1:secs, T2:secs
+      const t1 = msg.match(/T1:(\d+)/);
+      if (t1) {
+        const secs = parseInt(t1[1], 10);
+        if (secs > 0) {
+          const endMs = Date.now() + secs * 1000;
+          setTimerEnd((s) => ({ ...s, 1: endMs }));
+          setTimerTotal((s) => ({ ...s, 1: Math.max(s[1] || 0, secs) }));
+          persistTimer(1, endMs, secs);
+        } else {
+          setTimerEnd((s) => ({ ...s, 1: null }));
+          clearPersistedTimer(1);
+        }
+      }
+      const t2 = msg.match(/T2:(\d+)/);
+      if (t2) {
+        const secs = parseInt(t2[1], 10);
+        if (secs > 0) {
+          const endMs = Date.now() + secs * 1000;
+          setTimerEnd((s) => ({ ...s, 2: endMs }));
+          setTimerTotal((s) => ({ ...s, 2: Math.max(s[2] || 0, secs) }));
+          persistTimer(2, endMs, secs);
+        } else {
+          setTimerEnd((s) => ({ ...s, 2: null }));
+          clearPersistedTimer(2);
+        }
       }
 
       // Wi-Fi provisioning state parsing from ESP32
@@ -271,15 +376,13 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   const isDark = themeMode === 'system' ? systemColorScheme !== 'light' : themeMode === 'dark';
   const colors = isDark ? darkColors : lightColors;
 
-  const anyTimer = Object.values(timerEnd).some(Boolean);
-
-  /* clock: 1s while a timer runs, otherwise 20s */
+  /* 1-second continuous clock loop: always keeps timers and elapsed times precise */
   useEffect(() => {
     const t = setInterval(() => {
       const currentNow = Date.now();
       setNow(currentNow);
 
-      // Check if any active timer just finished
+      // Check if any active timer finished
       setTimerEnd((currentTimers) => {
         let hasExpired = false;
         const updated = { ...currentTimers };
@@ -290,18 +393,34 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
             hasExpired = true;
             updated[id] = null;
             clearPersistedTimer(id);
+
+            // Execute state update for expired relay
             onRef.current[id] = false;
-            setOn((s) => ({ ...s, [id]: false }));
-            setSince((s) => ({ ...s, [id]: null }));
+            setOn((s) => {
+              const next = { ...s, [id]: false };
+              persistRelayStates(next);
+              return next;
+            });
+            setSince((s) => {
+              const next = { ...s, [id]: null };
+              persistRelayStates(onRef.current, next);
+              return next;
+            });
+
+            // Send OFF commands to hardware
+            sendBleCommand(`R${id}_OFF`).catch(() => {});
+            sendBleCommand(`TIMER:${id}:0`).catch(() => {});
+            pub(`${BASE}/relay${id}/set`, 'OFF');
+            notify('success');
           }
         }
 
         return hasExpired ? updated : currentTimers;
       });
-    }, anyTimer ? 1000 : 20000);
+    }, 1000);
 
     return () => clearInterval(t);
-  }, [anyTimer]);
+  }, []);
 
   /* saved preferences */
   useEffect(() => {
@@ -397,8 +516,21 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       const id = Number(sm[1]);
       const val = body === 'ON';
       onRef.current[id] = val;
-      setOn((s) => ({ ...s, [id]: val }));
-      setSince((s) => ({ ...s, [id]: !val ? null : s[id] ?? Date.now() }));
+      setOn((s) => {
+        const next = { ...s, [id]: val };
+        persistRelayStates(next);
+        return next;
+      });
+      setSince((s) => {
+        const next = { ...s, [id]: !val ? null : s[id] ?? Date.now() };
+        persistRelayStates(onRef.current, next);
+        return next;
+      });
+      if (!val) {
+        setTimerEnd((s) => ({ ...s, [id]: null }));
+        setTimerTotal((s) => ({ ...s, [id]: 0 }));
+        clearPersistedTimer(id);
+      }
       if (pendingRef.current[id]) {
         setPend(id, false);
         notify('success');
@@ -470,16 +602,26 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const send = (id: number, value: boolean) => {
-    // 1. Immediately update local ref and React state so toggle is instant and accurate
+    // 1. Immediately update local ref, React state, and AsyncStorage so toggle is instant and accurate
     onRef.current[id] = value;
-    setOn((s) => ({ ...s, [id]: value }));
-    setSince((s) => ({ ...s, [id]: value ? Date.now() : null }));
+    setOn((s) => {
+      const next = { ...s, [id]: value };
+      persistRelayStates(next);
+      return next;
+    });
+    setSince((s) => {
+      const next = { ...s, [id]: value ? Date.now() : null };
+      persistRelayStates(onRef.current, next);
+      return next;
+    });
 
     // If relay turned off, clear any active timer
     if (!value) {
       setTimerEnd((s) => ({ ...s, [id]: null }));
       setTimerTotal((s) => ({ ...s, [id]: 0 }));
       clearPersistedTimer(id);
+      sendBleCommand(`TIMER:${id}:0`).catch(() => {});
+      pub(`${BASE}/relay${id}/timer/set`, '0');
     }
 
     // 2. Send via Bluetooth BLE if connected
@@ -506,11 +648,35 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     persistTimer(id, targetEnd, totalSecs);
 
     onRef.current[id] = true;
-    setOn((s) => ({ ...s, [id]: true }));
+    setOn((s) => {
+      const next = { ...s, [id]: true };
+      persistRelayStates(next);
+      return next;
+    });
+    setSince((s) => {
+      const next = { ...s, [id]: s[id] ?? Date.now() };
+      persistRelayStates(onRef.current, next);
+      return next;
+    });
 
     if (!pub(`${BASE}/relay${id}/timer/set`, String(minutes))) return;
     setPend(id, true);
     setTimeout(() => pendingRef.current[id] && setPend(id, false), 4000);
+  };
+
+  const extendTimer = (id: number, extraMinutes: number) => {
+    const currentEnd = timerEnd[id] || Date.now();
+    const newEnd = Math.max(Date.now(), currentEnd) + extraMinutes * 60 * 1000;
+    const remainingSecs = Math.round((newEnd - Date.now()) / 1000);
+    const newTotal = (timerTotal[id] || 0) + extraMinutes * 60;
+
+    setTimerEnd((s) => ({ ...s, [id]: newEnd }));
+    setTimerTotal((s) => ({ ...s, [id]: newTotal }));
+    persistTimer(id, newEnd, newTotal);
+
+    const remainingMinutes = Math.max(1, Math.ceil(remainingSecs / 60));
+    sendBleCommand(`TIMER:${id}:${remainingMinutes}`).catch(() => {});
+    pub(`${BASE}/relay${id}/timer/set`, String(remainingMinutes));
   };
 
   const value: Ctx = {
@@ -543,10 +709,12 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       const nextVal = !onRef.current[id];
       send(id, nextVal);
     },
+    send,
     allSet: (v) => {
       CHANNELS.forEach((ch) => send(ch.id, v));
     },
     startTimer,
+    extendTimer,
     cancelTimer: (id) => {
       sendBleCommand(`TIMER:${id}:0`).catch(() => {});
       pub(`${BASE}/relay${id}/timer/set`, '0');
