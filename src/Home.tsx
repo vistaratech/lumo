@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   FadeInDown,
+  ZoomIn,
   interpolateColor,
   useAnimatedStyle,
   useReducedMotion,
@@ -12,10 +13,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { CHANNELS } from './config';
-import { Press, Toggle, mmss, tap } from './theme';
+import { Glow, Press, Ring, Toggle, mmss, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
 import WifiModal from './WifiModal';
+import LumoBot from './LumoBot';
 
 const sinceLabel = (t: number | null, now: number) => {
   if (!t) return 'Active';
@@ -25,8 +27,7 @@ const sinceLabel = (t: number | null, now: number) => {
   return `On for ${Math.floor(m / 60)}h ${m % 60}m`;
 };
 
-/* ---------- Minimal & Clean Switch Card ---------- */
-function SwitchCard({ channel, index }: { channel: (typeof CHANNELS)[number]; index: number }) {
+function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: number }) {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
@@ -40,87 +41,151 @@ function SwitchCard({ channel, index }: { channel: (typeof CHANNELS)[number]; in
   const detail = timerActive ? `Auto-off in ${mmss(left)}` : sinceLabel(h.since[id] ?? null, h.now);
 
   const accentColor = isDark ? channel.color : channel.colorLight;
+  const cardBgOn = isDark ? channel.darkBgOn : channel.lightBgOn;
+  const cardBorderOn = isDark ? channel.darkBorderOn : channel.lightBorderOn;
 
   const p = useSharedValue(on ? 1 : 0);
+  const burst = useSharedValue(1);
+  const breathe = useSharedValue(0);
+  const first = useRef(true);
+
   useEffect(() => {
-    p.value = reduce ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 220, easing: Easing.out(Easing.cubic) });
+    p.value = reduce ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 250, easing: Easing.out(Easing.cubic) });
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (!reduce) {
+      burst.value = 0;
+      burst.value = withTiming(1, { duration: 1000, easing: Easing.out(Easing.cubic) });
+    }
   }, [on, reduce]);
 
-  const cardStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      p.value,
-      [0, 1],
-      [colors.card, isDark ? channel.darkBgOn : channel.lightBgOn]
-    ),
-    borderColor: interpolateColor(
-      p.value,
-      [0, 1],
-      [colors.line, isDark ? channel.darkBorderOn : channel.lightBorderOn]
-    ),
+  useEffect(() => {
+    if (reduce) return;
+    if (on) {
+      breathe.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.sin) }), -1, true);
+    } else {
+      breathe.value = withTiming(0, { duration: 400 });
+    }
+  }, [on, reduce]);
+
+  const card = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(p.value, [0, 1], [colors.card, cardBgOn]),
+    borderColor: interpolateColor(p.value, [0, 1], [colors.line, cardBorderOn]),
+    opacity: 1, // Keep fully interactive and bright at all times
+    transform: [{ scale: 1 + 0.012 * breathe.value }],
+  }));
+
+  const glow = useAnimatedStyle(() => ({
+    opacity: p.value * (0.55 + 0.25 * breathe.value),
+    transform: [{ scale: 0.85 + 0.25 * p.value + 0.08 * breathe.value }],
+  }));
+
+  const ring = useAnimatedStyle(() => ({
+    opacity: 0.65 * (1 - burst.value),
+    transform: [{ scale: 0.7 + 2.4 * burst.value }],
+  }));
+
+  const iconOff = useAnimatedStyle(() => ({ opacity: 1 - p.value }));
+  const iconOn = useAnimatedStyle(() => ({
+    opacity: p.value,
+    transform: [{ scale: 0.8 + 0.2 * p.value + 0.06 * breathe.value }],
   }));
 
   return (
-    <Animated.View entering={FadeInDown.delay(80 + index * 50).duration(240).easing(Easing.out(Easing.cubic))}>
+    <Animated.View entering={FadeInDown.delay(100 + index * 60).duration(260).easing(Easing.out(Easing.cubic))}>
       <Press
         onPress={() => {
           tap();
           h.toggle(id);
         }}
       >
-        <Animated.View style={[s.switchCard, cardStyle]}>
-          {/* Left Icon Badge */}
-          <View
-            style={[
-              s.iconBox,
-              {
-                backgroundColor: on ? `${accentColor}22` : colors.surface,
-                borderColor: on ? `${accentColor}45` : colors.line,
-              },
-            ]}
-          >
-            <Ionicons
-              name={channel.icon as any}
-              size={24}
-              color={on ? accentColor : colors.dim}
-            />
-          </View>
+        <Animated.View style={[s.tile, card]}>
+          {/* Ambient Glow */}
+          <Animated.View pointerEvents="none" style={[s.tileGlow, glow]}>
+            <Glow id={`tile-glow-${id}`} size={300} color={channel.glow} opacity={isDark ? 0.5 : 0.28} />
+          </Animated.View>
 
-          {/* Middle Info */}
-          <View style={s.cardInfo}>
-            <View style={s.roomTagRow}>
-              <Text style={[s.roomText, { color: on ? accentColor : colors.dim }]}>
-                {channel.room.toUpperCase()}
-              </Text>
-              {timerActive && (
-                <View style={[s.timerPill, { backgroundColor: `${accentColor}20` }]}>
-                  <Ionicons name="timer" size={11} color={accentColor} />
-                  <Text style={[s.timerPillText, { color: accentColor }]}>{mmss(left)}</Text>
-                </View>
-              )}
+          {/* Top Row: Icon Badge + Badges + Toggle */}
+          <View style={s.tileTop}>
+            <View
+              style={[
+                s.iconBox,
+                {
+                  backgroundColor: on ? `${accentColor}25` : colors.surface,
+                  borderColor: on ? `${accentColor}60` : colors.line,
+                },
+              ]}
+            >
+              <Animated.View style={[s.burstRing, { borderColor: accentColor }, ring]} />
+              <Animated.View style={[s.iconLayer, iconOff]}>
+                <Ionicons name={channel.icon === 'bulb' ? 'bulb-outline' : 'flash-outline'} size={28} color={colors.dim} />
+              </Animated.View>
+              <Animated.View style={[s.iconLayer, iconOn]}>
+                <Ionicons name={channel.icon as any} size={28} color={accentColor} />
+              </Animated.View>
             </View>
 
-            <Text style={[s.nameText, { color: colors.text }]}>{h.names[id]}</Text>
+            {/* Badges & Live Toggle */}
+            <View style={s.topRight}>
+              {/* Active Timer Pill */}
+              {timerActive && (
+                <View style={[s.timerBadge, { backgroundColor: `${accentColor}20`, borderColor: `${accentColor}50` }]}>
+                  <Ionicons name="timer" size={12} color={accentColor} />
+                  <Text style={[s.timerBadgeText, { color: accentColor }]}>{mmss(left)}</Text>
+                </View>
+              )}
 
-            <Text style={[s.statusText, { color: on ? (timerActive ? accentColor : colors.dim) : colors.dimmer }]}>
-              {pending ? 'Switching…' : on ? detail : 'Turned off'}
-            </Text>
+              {on && !timerActive && (
+                <View style={[s.liveBadge, { backgroundColor: `${accentColor}1C`, borderColor: `${accentColor}40` }]}>
+                  <Ionicons name="pulse" size={12} color={accentColor} />
+                  <Text style={[s.liveBadgeText, { color: accentColor }]}>LIVE</Text>
+                </View>
+              )}
+
+              <Toggle value={on} pending={pending} colors={colors} activeColor={accentColor} />
+            </View>
           </View>
 
-          {/* Right Toggle */}
-          <Toggle value={on} pending={pending} colors={colors} activeColor={accentColor} />
+          {/* Bottom Row: Room & Channel Nickname */}
+          <View>
+            <View style={s.roomRow}>
+              <View style={[s.roomDot, { backgroundColor: on ? accentColor : colors.dim }]} />
+              <Text style={[s.roomText, { color: on ? accentColor : colors.dim }]}>{channel.room}</Text>
+            </View>
+            <Text style={[s.tileName, { color: colors.text }]}>{h.names[id]}</Text>
+            <View style={s.statusRow}>
+              <Ionicons
+                name={pending ? 'sync-outline' : timerActive ? 'timer-outline' : on ? 'checkmark-circle' : 'power-outline'}
+                size={14}
+                color={on ? accentColor : colors.dim}
+              />
+              <Text
+                style={[
+                  s.tileSub,
+                  { color: on ? accentColor : colors.dim },
+                  on && { fontWeight: '600' },
+                ]}
+              >
+                {pending ? 'Switching…' : on ? detail : 'Turned Off'}
+              </Text>
+            </View>
+          </View>
         </Animated.View>
       </Press>
     </Animated.View>
   );
 }
 
-/* ---------- Minimal Connect Pill ---------- */
 function ConnectButton({
   ready,
+  bleActive,
   isDark,
   onPress,
 }: {
   ready: boolean;
+  bleActive: boolean;
   isDark: boolean;
   onPress: () => void;
 }) {
@@ -141,14 +206,14 @@ function ConnectButton({
 
   const ringStyle = useAnimatedStyle(() => ({
     opacity: ready ? 0.65 * (1 - pulse.value) : 0,
-    transform: [{ scale: 1 + pulse.value * 2 }],
+    transform: [{ scale: 1 + pulse.value * 2.2 }],
   }));
 
   return (
     <Press onPress={onPress}>
       <View
         style={[
-          s.headerBtn,
+          s.connectBtn,
           ready
             ? {
                 backgroundColor: isDark ? 'rgba(6, 214, 160, 0.12)' : '#ECFDF5',
@@ -166,22 +231,31 @@ function ConnectButton({
             <View style={s.dotCore} />
           </View>
         ) : (
-          <Ionicons name="bluetooth" size={13} color="#0084FF" />
+          <Ionicons name="bluetooth" size={14} color="#0084FF" />
         )}
         <Text
           style={[
-            s.headerBtnText,
-            { color: ready ? '#06D6A0' : isDark ? '#E2E8F0' : '#1E293B', fontWeight: '600' },
+            s.connectBtnText,
+            {
+              color: ready ? '#06D6A0' : isDark ? '#E2E8F0' : '#1E293B',
+              fontWeight: '600',
+            },
           ]}
         >
           {ready ? 'Connected' : 'Connect'}
         </Text>
+        {!ready && (
+          <Ionicons
+            name="chevron-forward"
+            size={13}
+            color={isDark ? '#64748B' : '#94A3B8'}
+          />
+        )}
       </View>
     </Press>
   );
 }
 
-/* ---------- Minimal Wi-Fi Pill ---------- */
 function WifiButton({
   wifiStatus,
   wifiSsid,
@@ -196,16 +270,27 @@ function WifiButton({
   onPress: () => void;
 }) {
   const isConnected = wifiStatus === 'connected';
+  const isConnecting = wifiStatus === 'connecting';
 
   return (
     <Press onPress={onPress}>
       <View
         style={[
-          s.headerBtn,
+          s.wifiHeaderBtn,
           isConnected
             ? {
                 backgroundColor: isDark ? 'rgba(6, 214, 160, 0.12)' : '#ECFDF5',
                 borderColor: isDark ? 'rgba(6, 214, 160, 0.4)' : '#A7F3D0',
+              }
+            : isConnecting
+            ? {
+                backgroundColor: isDark ? 'rgba(245, 158, 11, 0.14)' : '#FEF3C7',
+                borderColor: isDark ? 'rgba(245, 158, 11, 0.4)' : '#FDE68A',
+              }
+            : bleActive
+            ? {
+                backgroundColor: isDark ? 'rgba(0, 132, 255, 0.12)' : '#EFF6FF',
+                borderColor: isDark ? 'rgba(0, 132, 255, 0.35)' : '#BFDBFE',
               }
             : {
                 backgroundColor: isDark ? '#141C2E' : '#F1F5F9',
@@ -215,17 +300,44 @@ function WifiButton({
       >
         <Ionicons
           name={isConnected ? 'wifi' : 'wifi-outline'}
-          size={13}
-          color={isConnected ? '#06D6A0' : isDark ? '#64748B' : '#94A3B8'}
+          size={14}
+          color={
+            isConnected
+              ? '#06D6A0'
+              : isConnecting
+              ? '#F59E0B'
+              : bleActive
+              ? '#0084FF'
+              : isDark
+              ? '#64748B'
+              : '#94A3B8'
+          }
         />
         <Text
           style={[
-            s.headerBtnText,
-            { color: isConnected ? '#06D6A0' : isDark ? '#94A3B8' : '#64748B', fontWeight: '500' },
+            s.wifiHeaderBtnText,
+            {
+              color: isConnected
+                ? '#06D6A0'
+                : isConnecting
+                ? '#F59E0B'
+                : bleActive
+                ? '#0084FF'
+                : isDark
+                ? '#94A3B8'
+                : '#64748B',
+              fontWeight: isConnected || bleActive ? '600' : '500',
+            },
           ]}
           numberOfLines={1}
         >
-          {isConnected ? wifiSsid || 'Wi-Fi' : 'Wi-Fi'}
+          {isConnected
+            ? wifiSsid || 'Wi-Fi'
+            : isConnecting
+            ? 'Connecting…'
+            : bleActive
+            ? 'Wi-Fi Setup'
+            : 'Wi-Fi'}
         </Text>
       </View>
     </Press>
@@ -243,21 +355,21 @@ export default function Home() {
   const greetingIcon = hour < 12 ? 'sunny' : hour < 17 ? 'partly-sunny' : 'moon';
   const greetingColor = hour < 12 ? '#FF9500' : hour < 17 ? '#F59E0B' : '#8B5CF6';
 
+  const allOnActive = onCount === CHANNELS.length && CHANNELS.length > 0;
   const [bleModalOpen, setBleModalOpen] = useState(false);
   const [wifiModalOpen, setWifiModalOpen] = useState(false);
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
-      {/* Clean Top Header */}
-      <Animated.View entering={FadeInDown.duration(400)} style={s.topBar}>
-        <View>
+    <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
+      {/* Top Header Bar */}
+      <Animated.View entering={FadeInDown.duration(450)} style={s.top}>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={[s.headerTitle, { color: colors.text }]}>Home</Text>
           <View style={s.greetingRow}>
-            <Ionicons name={greetingIcon as any} size={14} color={greetingColor} />
-            <Text style={[s.greetingText, { color: colors.dim }]}>{greeting}</Text>
+            <Ionicons name={greetingIcon as any} size={15} color={greetingColor} />
+            <Text style={[s.greeting, { color: colors.dim }]}>{greeting}</Text>
           </View>
-          <Text style={[s.pageTitle, { color: colors.text }]}>Home</Text>
         </View>
-
         <View style={s.topActions}>
           <WifiButton
             wifiStatus={h.wifiStatus}
@@ -271,6 +383,7 @@ export default function Home() {
           />
           <ConnectButton
             ready={h.ready}
+            bleActive={h.bleActive}
             isDark={isDark}
             onPress={() => {
               tap();
@@ -280,87 +393,99 @@ export default function Home() {
         </View>
       </Animated.View>
 
-      {/* Clean & Compact Status Card */}
-      <Animated.View entering={FadeInDown.delay(60).duration(350)} style={s.summaryCardWrap}>
+      {/* 3D Interactive Mascot Companion */}
+      <LumoBot />
+
+      {/* Hero Glow Card */}
+      <Animated.View entering={FadeInDown.delay(100).duration(500)} style={s.heroCardWrapper}>
         <View
           style={[
-            s.summaryCard,
+            s.heroCard,
             {
               backgroundColor: colors.card,
-              borderColor: colors.line,
+              borderColor: onCount > 0 ? (isDark ? '#7C4B18' : '#FED7AA') : colors.line,
+              shadowColor: colors.lamp,
+              shadowOpacity: onCount > 0 ? (isDark ? 0.22 : 0.12) : 0.05,
+              shadowRadius: 16,
+              elevation: 4,
             },
           ]}
         >
-          <View style={s.summaryInfo}>
-            <View style={s.statusDotRow}>
-              <View
-                style={[
-                  s.statusLiveDot,
-                  { backgroundColor: onCount > 0 ? colors.ok : colors.dimmer },
-                ]}
-              />
-              <Text style={[s.summaryHeadline, { color: colors.text }]}>
-                {onCount === 0
-                  ? 'All devices off'
-                  : onCount === CHANNELS.length
-                  ? 'All switches active'
-                  : `${onCount} of ${CHANNELS.length} switches on`}
-              </Text>
+          {/* Ambient Corner Glow */}
+          {onCount > 0 && (
+            <View pointerEvents="none" style={s.heroGlow}>
+              <Glow id="hero-glow" size={320} color={colors.lamp} opacity={isDark ? 0.38 : 0.2} />
             </View>
-            <Text style={[s.summarySub, { color: colors.dim }]}>
-              {h.ready ? 'Connected & ready' : 'Connecting to switches...'}
-            </Text>
-          </View>
+          )}
 
-          {/* Quick All On / All Off Pills */}
-          <View style={s.quickActionRow}>
-            <Press
-              onPress={() => {
-                tap();
-                h.allSet(true);
-              }}
-              style={[
-                s.quickPill,
-                {
-                  backgroundColor: onCount === CHANNELS.length ? `${colors.lamp}20` : colors.surface,
-                  borderColor: onCount === CHANNELS.length ? colors.lamp : colors.line,
-                },
-              ]}
+          <Ring size={108} stroke={9} progress={onCount / CHANNELS.length} color={onCount > 0 ? colors.lamp : colors.dim}>
+            <Animated.Text
+              key={onCount}
+              entering={ZoomIn.duration(200).easing(Easing.out(Easing.cubic))}
+              style={[s.heroNum, { color: colors.text }]}
             >
-              <Ionicons
-                name="sunny"
-                size={13}
-                color={onCount === CHANNELS.length ? colors.lamp : colors.dim}
-              />
-              <Text
+              {onCount}
+              <Text style={{ fontSize: 16, color: colors.dim }}>/{CHANNELS.length}</Text>
+            </Animated.Text>
+          </Ring>
+
+          <View style={{ flex: 1 }}>
+            <Text style={[s.heroTitle, { color: colors.text }]}>
+              {onCount === 0 ? 'All Devices Off' : onCount === CHANNELS.length ? 'Full Illumination' : `${onCount} Active Device${onCount > 1 ? 's' : ''}`}
+            </Text>
+            <Text style={[s.heroSub, { color: colors.dim }]}>
+              {!h.ready ? 'Connecting to controller...' : onCount === 0 ? 'Tap below to activate' : 'System running smoothly'}
+            </Text>
+
+            {/* Quick Action Buttons */}
+            <View style={s.heroBtnRow}>
+              <Press
+                onPress={() => {
+                  tap();
+                  h.allSet(true);
+                }}
                 style={[
-                  s.quickPillText,
+                  s.quickBtn,
                   {
-                    color: onCount === CHANNELS.length ? colors.lamp : colors.text,
-                    fontWeight: '600',
+                    backgroundColor: allOnActive ? colors.lamp : `${colors.lamp}20`,
+                    borderColor: colors.lamp,
                   },
                 ]}
               >
-                All On
-              </Text>
-            </Press>
+                <Ionicons name="sunny" size={14} color={allOnActive ? '#FFFFFF' : colors.lamp} />
+                <Text
+                  style={[
+                    s.quickBtnText,
+                    { color: allOnActive ? '#FFFFFF' : colors.lamp, fontWeight: '700' },
+                  ]}
+                >
+                  All On
+                </Text>
+              </Press>
 
-            <Press
-              onPress={() => {
-                tap();
-                h.allSet(false);
-              }}
-              style={[s.quickPill, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            >
-              <Ionicons name="power" size={13} color={colors.dim} />
-              <Text style={[s.quickPillText, { color: colors.dim, fontWeight: '600' }]}>All Off</Text>
-            </Press>
+              <Press
+                onPress={() => {
+                  tap();
+                  h.allSet(false);
+                }}
+                style={[
+                  s.quickBtn,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.line,
+                  },
+                ]}
+              >
+                <Ionicons name="power" size={14} color={colors.dim} />
+                <Text style={[s.quickBtnText, { color: colors.dim, fontWeight: '600' }]}>All Off</Text>
+              </Press>
+            </View>
           </View>
         </View>
       </Animated.View>
 
-      {/* Clean Quick Scenes */}
-      <Animated.View entering={FadeInDown.delay(120).duration(350)} style={s.scenesContainer}>
+      {/* Smart Scenes Quick Bar */}
+      <Animated.View entering={FadeInDown.delay(180).duration(450)} style={s.scenesContainer}>
         <Text style={[s.sectionTitle, { color: colors.dim }]}>QUICK SCENES</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scenesRow}>
           <Press
@@ -370,7 +495,7 @@ export default function Home() {
             }}
             style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
           >
-            <Ionicons name="power" size={14} color="#F43F5E" />
+            <Ionicons name="power" size={15} color="#F43F5E" />
             <Text style={[s.sceneChipText, { color: colors.text }]}>All Off</Text>
           </Press>
 
@@ -381,30 +506,33 @@ export default function Home() {
             }}
             style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
           >
-            <Ionicons name="sunny" size={14} color="#FF9500" />
+            <Ionicons name="sunny" size={15} color="#FF9500" />
             <Text style={[s.sceneChipText, { color: colors.text }]}>Full Light</Text>
           </Press>
 
           <Press
             onPress={() => {
               tap();
-              h.send(1, false);
+              // Night Comfort: Turn off Switch 1, turn on Switch 2 with 30m timer
+              h.toggle(1);
+              if (h.on[1]) h.send(1, false);
               h.startTimer(2, 30);
             }}
             style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
           >
-            <Ionicons name="bed-outline" size={14} color="#06D6A0" />
+            <Ionicons name="bed-outline" size={15} color="#06D6A0" />
             <Text style={[s.sceneChipText, { color: colors.text }]}>Night (30m)</Text>
           </Press>
 
           <Press
             onPress={() => {
               tap();
+              // Focus: Switch 1 with 45m timer
               h.startTimer(1, 45);
             }}
             style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
           >
-            <Ionicons name="book-outline" size={14} color="#8B5CF6" />
+            <Ionicons name="book-outline" size={15} color="#8B5CF6" />
             <Text style={[s.sceneChipText, { color: colors.text }]}>Focus (45m)</Text>
           </Press>
         </ScrollView>
@@ -413,24 +541,27 @@ export default function Home() {
       {/* Section Header */}
       <View style={s.sectionHeader}>
         <Text style={[s.sectionTitle, { color: colors.dim }]}>CONTROLS</Text>
-        <Text style={[s.switchCountText, { color: colors.dim }]}>{CHANNELS.length} switches</Text>
+        <View style={s.channelCountWrap}>
+          <Ionicons name="hardware-chip-outline" size={13} color={colors.dim} />
+          <Text style={[s.sectionCount, { color: colors.dim }]}>{CHANNELS.length} switches</Text>
+        </View>
       </View>
 
-      {/* Clean Switch Cards List */}
-      <View style={s.switchList}>
+      {/* Colorful Switch Tiles */}
+      <View style={s.tiles}>
         {CHANNELS.map((ch, i) => (
-          <SwitchCard key={ch.id} channel={ch} index={i} />
+          <Tile key={ch.id} channel={ch} index={i} />
         ))}
       </View>
 
-      {/* Bluetooth Discovery Modal */}
+      {/* Bluetooth Discovery & Pairing Modal */}
       <BluetoothModal
         visible={bleModalOpen}
         onClose={() => setBleModalOpen(false)}
         onOpenWifi={() => setWifiModalOpen(true)}
       />
 
-      {/* Wi-Fi Provisioning Modal */}
+      {/* Device Wi-Fi Provisioning Modal */}
       <WifiModal
         visible={wifiModalOpen}
         onClose={() => setWifiModalOpen(false)}
@@ -441,225 +572,215 @@ export default function Home() {
 }
 
 const s = StyleSheet.create({
-  topBar: {
+  top: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 22,
-    paddingTop: 16,
-    paddingBottom: 10,
-  },
-  greetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 2,
-  },
-  greetingText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: -0.8,
+    paddingHorizontal: 24,
+    paddingTop: 18,
+    paddingBottom: 12,
   },
   topActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingTop: 6,
   },
-  headerBtn: {
+  connectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  connectBtnText: {
+    fontSize: 13,
+    letterSpacing: -0.1,
+  },
+  wifiHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 11,
-    borderRadius: 20,
-    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    elevation: 2,
+    maxWidth: 130,
   },
-  headerBtnText: {
+  wifiHeaderBtnText: {
     fontSize: 12,
     letterSpacing: -0.1,
   },
   dotWrap: {
-    width: 8,
-    height: 8,
+    width: 10,
+    height: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dotRing: {
     position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#06D6A0',
   },
   dotCore: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#06D6A0',
   },
-
-  /* Summary Card */
-  summaryCardWrap: {
+  headerTitle: {
+    fontSize: 42,
+    fontWeight: '300',
+    letterSpacing: -1.3,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  greeting: { fontSize: 15, fontWeight: '400' },
+  heroCardWrapper: {
     paddingHorizontal: 20,
     marginTop: 6,
     marginBottom: 14,
   },
-  summaryCard: {
+  heroCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
-    elevation: 2,
+    gap: 16,
+    padding: 20,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  summaryInfo: { gap: 3 },
-  statusDotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
+  heroGlow: {
+    position: 'absolute',
+    left: -70,
+    top: -70,
   },
-  statusLiveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  summaryHeadline: {
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  summarySub: {
-    fontSize: 12,
-  },
-  quickActionRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  quickPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingVertical: 7,
-    paddingHorizontal: 11,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  quickPillText: {
-    fontSize: 12,
-  },
-
-  /* Scenes */
-  scenesContainer: {
-    paddingHorizontal: 22,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  scenesRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sceneChip: {
+  heroNum: { fontSize: 30, fontWeight: '700' },
+  heroTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+  heroSub: { fontSize: 13, marginTop: 2 },
+  heroBtnRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  quickBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingVertical: 8,
-    paddingHorizontal: 13,
-    borderRadius: 14,
+    paddingHorizontal: 14,
+    borderRadius: 999,
     borderWidth: 1,
   },
-  sceneChipText: {
-    fontSize: 12,
-    fontWeight: '600',
+  quickBtnText: { fontSize: 13 },
+  scenesContainer: {
+    paddingHorizontal: 22,
+    marginBottom: 14,
   },
-
-  /* Controls Section */
+  scenesRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  sceneChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  sceneChipText: { fontSize: 13, fontWeight: '600' },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 22,
+    paddingHorizontal: 24,
     marginBottom: 10,
+    marginTop: 6,
   },
-  switchCountText: {
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  channelCountWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  sectionCount: {
     fontSize: 12,
     fontWeight: '500',
   },
-
-  /* Switch Cards */
-  switchList: {
-    paddingHorizontal: 20,
-    gap: 12,
+  tiles: { paddingHorizontal: 20, gap: 14 },
+  tile: {
+    height: 184,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    padding: 20,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 3,
   },
-  switchCard: {
+  tileGlow: { position: 'absolute', left: -70, top: -70 },
+  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 22,
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
     borderWidth: 1,
-    gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 2,
   },
+  timerBadgeText: { fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  liveBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardInfo: {
-    flex: 1,
-    gap: 3,
-  },
-  roomTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  roomText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-  },
-  timerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingVertical: 1,
-    paddingHorizontal: 6,
-    borderRadius: 6,
-  },
-  timerPillText: {
-    fontSize: 10,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  nameText: {
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: -0.3,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
+  iconLayer: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  burstRing: { position: 'absolute', width: 56, height: 56, borderRadius: 20, borderWidth: 2 },
+  roomRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  roomDot: { width: 6, height: 6, borderRadius: 3 },
+  roomText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  tileName: { fontSize: 23, fontWeight: '700', letterSpacing: -0.3 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
+  tileSub: { fontSize: 14 },
 });
