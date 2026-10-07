@@ -1,0 +1,310 @@
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useColorScheme } from 'react-native';
+import Paho from 'paho-mqtt';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE, BROKER, CHANNELS } from './config';
+import { ThemeColors, ThemeMode, darkColors, feel, lightColors, notify } from './theme';
+import { addBleDataListener, addBleListener, isBleConnected, sendBleCommand } from './bluetooth';
+
+type Rec<T> = Record<number, T>;
+
+type Ctx = {
+  brokerUp: boolean;
+  deviceUp: boolean;
+  bleActive: boolean;
+  bleDeviceName: string | null;
+  ready: boolean;
+  now: number;
+  on: Rec<boolean>;
+  since: Rec<number | null>;
+  pending: Rec<boolean>;
+  timerEnd: Rec<number | null>;
+  timerTotal: Rec<number>;
+  names: Rec<string>;
+  haptics: boolean;
+  themeMode: ThemeMode;
+  isDark: boolean;
+  colors: ThemeColors;
+  C: ThemeColors;
+  setName: (id: number, name: string) => void;
+  setHaptics: (v: boolean) => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  toggle: (id: number) => void;
+  allSet: (value: boolean) => void;
+  startTimer: (id: number, minutes: number) => void;
+  cancelTimer: (id: number) => void;
+  reconnect: () => void;
+};
+
+const HomeCtx = createContext<Ctx>({} as Ctx);
+export const useHome = () => useContext(HomeCtx);
+
+export function HomeProvider({ children }: { children: React.ReactNode }) {
+  const systemColorScheme = useColorScheme();
+  const client = useRef<Paho.Client | null>(null);
+  const onRef = useRef<Rec<boolean>>({});
+  const pendingRef = useRef<Rec<boolean>>({});
+
+  const [brokerUp, setBrokerUp] = useState(false);
+  const [deviceUp, setDeviceUp] = useState(false);
+  const [on, setOn] = useState<Rec<boolean>>({});
+  const [since, setSince] = useState<Rec<number | null>>({});
+  const [pending, setPending] = useState<Rec<boolean>>({});
+  const [timerEnd, setTimerEnd] = useState<Rec<number | null>>({});
+  const [timerTotal, setTimerTotal] = useState<Rec<number>>({});
+  const [names, setNames] = useState<Rec<string>>(Object.fromEntries(CHANNELS.map((c) => [c.id, c.name])));
+  const [haptics, setHapticsState] = useState(true);
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
+  const [now, setNow] = useState(Date.now());
+
+  const [bleActive, setBleActive] = useState(isBleConnected());
+  const [bleDeviceName, setBleDeviceName] = useState<string | null>(null);
+
+  /* Listen to real Bluetooth connection state and live notifications from ESP32 */
+  useEffect(() => {
+    const unsubState = addBleListener((connected, name) => {
+      setBleActive(connected);
+      if (name) setBleDeviceName(name);
+    });
+
+    const unsubData = addBleDataListener((msg) => {
+      if (typeof msg !== 'string') return;
+      const m1 = msg.match(/R1:([01])/);
+      if (m1) {
+        const val = m1[1] === '1';
+        onRef.current[1] = val;
+        setOn((s) => ({ ...s, 1: val }));
+        setSince((s) => ({ ...s, 1: val ? s[1] ?? Date.now() : null }));
+      }
+      const m2 = msg.match(/R2:([01])/);
+      if (m2) {
+        const val = m2[1] === '1';
+        onRef.current[2] = val;
+        setOn((s) => ({ ...s, 2: val }));
+        setSince((s) => ({ ...s, 2: val ? s[2] ?? Date.now() : null }));
+      }
+    });
+
+    return () => {
+      unsubState();
+      unsubData();
+    };
+  }, []);
+
+  const isDark = themeMode === 'system' ? systemColorScheme !== 'light' : themeMode === 'dark';
+  const colors = isDark ? darkColors : lightColors;
+
+  const anyTimer = Object.values(timerEnd).some(Boolean);
+
+  /* clock: 1s while a timer runs, otherwise 20s */
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), anyTimer ? 1000 : 20000);
+    return () => clearInterval(t);
+  }, [anyTimer]);
+
+  /* saved preferences */
+  useEffect(() => {
+    AsyncStorage.getItem('lumo.prefs')
+      .then((v) => {
+        if (!v) return;
+        try {
+          const p = JSON.parse(v);
+          if (p.names) setNames((n) => ({ ...n, ...p.names }));
+          if (typeof p.haptics === 'boolean') {
+            feel.haptics = p.haptics;
+            setHapticsState(p.haptics);
+          }
+          if (p.themeMode && (p.themeMode === 'dark' || p.themeMode === 'light' || p.themeMode === 'system')) {
+            setThemeModeState(p.themeMode);
+          }
+        } catch {}
+      })
+      .catch(() => {});
+  }, []);
+
+  const save = (n: Rec<string>, hp: boolean, tm: ThemeMode) =>
+    AsyncStorage.setItem('lumo.prefs', JSON.stringify({ names: n, haptics: hp, themeMode: tm })).catch(() => {});
+
+  const setName = (id: number, name: string) => {
+    const n = { ...names, [id]: name };
+    setNames(n);
+    save(n, haptics, themeMode);
+  };
+
+  const setHaptics = (v: boolean) => {
+    feel.haptics = v;
+    setHapticsState(v);
+    save(names, v, themeMode);
+  };
+
+  const setThemeMode = (mode: ThemeMode) => {
+    setThemeModeState(mode);
+    save(names, haptics, mode);
+  };
+
+  const setPend = (id: number, v: boolean) => {
+    pendingRef.current[id] = v;
+    setPending((p) => ({ ...p, [id]: v }));
+  };
+
+  /* MQTT — Only connects if real credentials are provided (prevents lag & network hanging) */
+  useEffect(() => {
+    const isConfigured =
+      BROKER.host &&
+      !BROKER.host.includes('YOUR-CLUSTER') &&
+      !BROKER.host.includes('YOUR_HOST');
+
+    if (!isConfigured) {
+      console.log('[Home] MQTT Broker is not configured. Running in fast local Bluetooth mode.');
+      return;
+    }
+
+    const c = new Paho.Client(BROKER.host, BROKER.port, '/mqtt', 'app-' + Math.random().toString(16).slice(2, 10));
+    client.current = c;
+
+    const onConnected = () => {
+      setBrokerUp(true);
+      c.subscribe(`${BASE}/status`, { qos: 1 });
+      c.subscribe(`${BASE}/+/state`, { qos: 1 });
+      c.subscribe(`${BASE}/+/timer`, { qos: 1 });
+    };
+    (c as any).onConnected = onConnected;
+    c.onConnectionLost = () => {
+      setBrokerUp(false);
+      setDeviceUp(false);
+    };
+    c.onMessageArrived = (m) => {
+      const topic = m.destinationName;
+      const body = m.payloadString;
+
+      if (topic === `${BASE}/status`) {
+        setDeviceUp(body === 'online');
+        return;
+      }
+
+      const tm = topic.match(/relay(\d)\/timer$/);
+      if (tm) {
+        const id = Number(tm[1]);
+        const secs = parseInt(body, 10) || 0;
+        setTimerEnd((s) => ({ ...s, [id]: secs > 0 ? Date.now() + secs * 1000 : null }));
+        setTimerTotal((s) => ({ ...s, [id]: secs > 0 ? Math.max(s[id] ?? 0, secs) : 0 }));
+        return;
+      }
+
+      const sm = topic.match(/relay(\d)\/state$/);
+      if (!sm) return;
+      const id = Number(sm[1]);
+      const val = body === 'ON';
+      onRef.current[id] = val;
+      setOn((s) => ({ ...s, [id]: val }));
+      setSince((s) => ({ ...s, [id]: !val ? null : s[id] ?? Date.now() }));
+      if (pendingRef.current[id]) {
+        setPend(id, false);
+        notify('success');
+      }
+    };
+
+    c.connect({
+      useSSL: true,
+      userName: BROKER.user,
+      password: BROKER.pass,
+      keepAliveInterval: 30,
+      timeout: 10,
+      reconnect: true,
+      onSuccess: onConnected,
+      onFailure: () => setBrokerUp(false),
+    });
+    return () => {
+      try {
+        c.disconnect();
+      } catch {}
+    };
+  }, []);
+
+  const pub = (topic: string, payload: string) => {
+    if (!client.current?.isConnected()) return false;
+    const msg = new Paho.Message(payload);
+    msg.destinationName = topic;
+    msg.qos = 1;
+    client.current.send(msg);
+    return true;
+  };
+
+  const send = (id: number, value: boolean) => {
+    // 1. Immediately update local ref and React state so toggle is instant and accurate
+    onRef.current[id] = value;
+    setOn((s) => ({ ...s, [id]: value }));
+    setSince((s) => ({ ...s, [id]: value ? Date.now() : null }));
+
+    // 2. Send via Bluetooth BLE if connected
+    sendBleCommand(`R${id}_${value ? 'ON' : 'OFF'}`).catch(() => {});
+
+    // 3. Also publish to MQTT if available
+    if (pub(`${BASE}/relay${id}/set`, value ? 'ON' : 'OFF')) {
+      setPend(id, true);
+      setTimeout(() => {
+        if (pendingRef.current[id]) {
+          setPend(id, false);
+        }
+      }, 3000);
+    }
+  };
+
+  const startTimer = (id: number, minutes: number) => {
+    sendBleCommand(`TIMER:${id}:${minutes}`).catch(() => {});
+    setTimerTotal((s) => ({ ...s, [id]: minutes * 60 }));
+    setTimerEnd((s) => ({ ...s, [id]: Date.now() + minutes * 60 * 1000 }));
+    onRef.current[id] = true;
+    setOn((s) => ({ ...s, [id]: true }));
+
+    if (!pub(`${BASE}/relay${id}/timer/set`, String(minutes))) return;
+    setPend(id, true);
+    setTimeout(() => pendingRef.current[id] && setPend(id, false), 4000);
+  };
+
+  const value: Ctx = {
+    brokerUp,
+    deviceUp,
+    bleActive,
+    bleDeviceName,
+    ready: bleActive || (brokerUp && deviceUp),
+    now,
+    on,
+    since,
+    pending,
+    timerEnd,
+    timerTotal,
+    names,
+    haptics,
+    themeMode,
+    isDark,
+    colors,
+    C: colors,
+    setName,
+    setHaptics,
+    setThemeMode,
+    toggle: (id) => {
+      const nextVal = !onRef.current[id];
+      send(id, nextVal);
+    },
+    allSet: (v) => {
+      CHANNELS.forEach((ch) => send(ch.id, v));
+    },
+    startTimer,
+    cancelTimer: (id) => {
+      sendBleCommand(`TIMER:${id}:0`).catch(() => {});
+      pub(`${BASE}/relay${id}/timer/set`, '0');
+    },
+    reconnect: () => {
+      try {
+        if (client.current && client.current.isConnected()) {
+          client.current.disconnect();
+        }
+      } catch {}
+      setBrokerUp(false);
+      setDeviceUp(false);
+    },
+  };
+
+  return <HomeCtx.Provider value={value}>{children}</HomeCtx.Provider>;
+}
