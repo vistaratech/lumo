@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   FadeInDown,
@@ -163,11 +163,38 @@ export function Ring({
   const r = (size - stroke) / 2;
   const len = 2 * Math.PI * r;
   const c = size / 2;
+  const clamped = Math.min(1, Math.max(0, progress));
+
+  if (Platform.OS === 'web') {
+    const offset = len * (1 - clamped);
+    return (
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+          <Circle cx={c} cy={c} r={r} stroke="rgba(128,128,128,0.15)" strokeWidth={stroke} fill="none" />
+          <Circle
+            cx={c}
+            cy={c}
+            r={r}
+            stroke={color}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={len}
+            strokeDashoffset={offset}
+            rotation="-90"
+            origin={`${c}, ${c}`}
+          />
+        </Svg>
+        {children}
+      </View>
+    );
+  }
+
   const p = useSharedValue(progress);
 
   useEffect(() => {
-    p.value = withTiming(Math.min(1, Math.max(0, progress)), { duration, easing: Easing.out(Easing.cubic) });
-  }, [progress, duration]);
+    p.value = withTiming(clamped, { duration, easing: Easing.out(Easing.cubic) });
+  }, [clamped, duration]);
 
   const props = useAnimatedProps(() => ({ strokeDashoffset: len * (1 - p.value) }));
 
