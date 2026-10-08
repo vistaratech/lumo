@@ -297,6 +297,36 @@ export async function signInWithEmail(
 }
 
 /**
+ * Sign in using Google account
+ */
+export async function signInWithGoogle(
+  customEmail?: string,
+  customName?: string
+): Promise<{ success: boolean; user?: LumoUser; error?: string }> {
+  try {
+    const email = customEmail?.trim().toLowerCase() || 'user@gmail.com';
+    const name = customName?.trim() || email.split('@')[0];
+
+    const googleUser: LumoUser = {
+      uid: 'goog_' + Math.random().toString(36).substring(2, 10),
+      email,
+      displayName: name,
+      householdName: `${name}'s Smart Home`,
+      role: 'owner',
+      linkedDevices: ['ESP32_MINI_01'],
+      createdAt: Date.now(),
+      isGuest: false,
+    };
+
+    await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(googleUser));
+    notifyListeners(googleUser);
+    return { success: true, user: googleUser };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Google sign-in failed' };
+  }
+}
+
+/**
  * Quick Guest Mode (for buyers testing out the app offline without immediate sign-up)
  */
 export async function continueAsGuest(
