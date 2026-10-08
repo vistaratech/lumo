@@ -381,7 +381,8 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
 
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        console.log('[Home] Foreground active: auto-reconnecting BLE and syncing states');
+        console.log('[Home] Foreground active: syncing auth, BLE and relay states');
+        initAuth().then((u) => { if (u) setUser(u); }).catch(() => {});
         autoReconnectBle().catch(() => {});
         syncTimersFromStorage();
         // Request fresh physical status from ESP32 immediately

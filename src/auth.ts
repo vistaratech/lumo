@@ -96,12 +96,9 @@ export async function initAuth(): Promise<LumoUser | null> {
           currentUser = syncedUser;
           await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(syncedUser));
           notifyListeners(syncedUser);
-        } else if (currentUser && !currentUser.isGuest) {
-          // Firebase signed out and not a local guest
-          currentUser = null;
-          await AsyncStorage.removeItem(STORAGE_KEY_USER);
-          notifyListeners(null);
         }
+        // Note: Do not remove local user session if fbUser is null on cold start / offline
+        // Only explicit signOut() will remove the user session from storage.
       });
     } catch (e) {
       console.warn('[Auth] Firebase onAuthStateChanged error:', e);
