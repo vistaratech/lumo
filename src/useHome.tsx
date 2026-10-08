@@ -14,6 +14,42 @@ export interface ScannedWifi {
   locked: boolean;
 }
 
+export interface CustomScene {
+  id: string;
+  name: string;
+  icon: string;
+  color?: string;
+  r1?: boolean;
+  r2?: boolean;
+  timerMinutes?: number;
+  isCustom?: boolean;
+}
+
+export interface ScheduleItem {
+  id: string;
+  name: string;
+  enabled: boolean;
+  time: string;
+  days: string[];
+  action: 'on' | 'off';
+  channelId: number | 'all';
+}
+
+export interface EnergyStats {
+  totalSeconds: number;
+  totalKWh: number;
+  totalCost: number;
+  channels: Record<number, { seconds: number; kWh: number; cost: number }>;
+}
+
+export interface WeeklyEnergyDay {
+  date: string;
+  dayLabel: string;
+  kWh: number;
+  cost: number;
+  seconds: number;
+}
+
 type Ctx = {
   brokerUp: boolean;
   deviceUp: boolean;
@@ -51,6 +87,29 @@ type Ctx = {
   refreshWifi: () => void;
   scanWifi: () => void;
   extendTimer: (id: number, minutes: number) => void;
+
+  // New Smart Features
+  scenes: CustomScene[];
+  addCustomScene: (scene: Omit<CustomScene, 'id' | 'isCustom'>) => Promise<void>;
+  removeCustomScene: (id: string) => Promise<void>;
+  activateScene: (scene: CustomScene) => void;
+
+  schedules: ScheduleItem[];
+  addSchedule: (sch: Omit<ScheduleItem, 'id'>) => Promise<void>;
+  toggleSchedule: (id: string) => Promise<void>;
+  removeSchedule: (id: string) => Promise<void>;
+
+  wattage: Record<number, number>;
+  setWattage: (channelId: number, watts: number) => Promise<void>;
+  tariff: number;
+  setTariff: (rate: number) => Promise<void>;
+  getTodayStats: () => EnergyStats;
+  getWeeklyStats: () => WeeklyEnergyDay[];
+
+  nightGuard: { enabled: boolean; maxHours: number };
+  setNightGuard: (cfg: { enabled: boolean; maxHours: number }) => Promise<void>;
+
+  executeVoiceCommand: (cmd: string) => { success: boolean; message: string; action: string };
 };
 
 const HomeCtx = createContext<Ctx>({} as Ctx);
@@ -59,6 +118,24 @@ export const useHome = () => useContext(HomeCtx);
 const TIMERS_STORAGE_KEY = 'lumo.active_timers';
 const RELAYS_STORAGE_KEY = 'lumo.relay_states';
 const RELAYS_SINCE_KEY = 'lumo.relay_since';
+const SCENES_STORAGE_KEY = 'lumo.custom_scenes';
+const SCHEDULES_STORAGE_KEY = 'lumo.daily_schedules';
+const WATTAGE_STORAGE_KEY = 'lumo.wattage';
+const TARIFF_STORAGE_KEY = 'lumo.tariff';
+const ENERGY_STORAGE_KEY = 'lumo.energy_history';
+const NIGHT_GUARD_STORAGE_KEY = 'lumo.night_guard';
+
+const DEFAULT_SCENES: CustomScene[] = [
+  { id: 'all_off', name: 'All Off', icon: 'power-outline', color: '#F43F5E', r1: false, r2: false },
+  { id: 'full_light', name: 'Full Light', icon: 'sunny-outline', color: '#FF9F1C', r1: true, r2: true },
+  { id: 'night_30m', name: 'Night (30m)', icon: 'bed-outline', color: '#06D6A0', r1: false, r2: false, timerMinutes: 30 },
+  { id: 'reading', name: 'Reading', icon: 'book-outline', color: '#8B5CF6', r1: true, r2: false },
+];
+
+const DEFAULT_SCHEDULES: ScheduleItem[] = [
+  { id: 'sch_1', name: 'Evening Porch Light', enabled: true, time: '18:30', days: ['Everyday'], action: 'on', channelId: 1 },
+  { id: 'sch_2', name: 'Morning Sunrise Off', enabled: true, time: '06:00', days: ['Everyday'], action: 'off', channelId: 1 },
+];
 
 async function loadPersistedTimers(): Promise<Record<number, { end: number; total: number }>> {
   try {
@@ -138,13 +215,78 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   const [isScanningWifi, setIsScanningWifi] = useState(false);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* Load cached Wi-Fi SSID from storage */
+  // New Smart Features State
+  const [scenes, setScenes] = useState<CustomScene[]>(DEFAULT_SCENES);
+  const [schedules, setSchedules] = useState<ScheduleItem[]>(DEFAULT_SCHEDULES);
+  const [wattage, setWattageState] = useState<Record<number, number>>({ 1: 20, 2: 40 });
+  const [tariff, setTariffState] = useState<number>(4.5);
+  const [energyHistory, setEnergyHistory] = useState<Record<string, Record<number, number>>>({});
+  const [nightGuard, setNightGuardState] = useState<{ enabled: boolean; maxHours: number }>({ enabled: false, maxHours: 4 });
+  const lastScheduleTriggerMinute = useRef<string>('');
+
+  /* Load cached Wi-Fi SSID and Smart Home Features from storage */
   useEffect(() => {
     AsyncStorage.getItem('lumo.wifi_ssid')
       .then((s) => {
         if (s) setWifiSsid(s);
       })
       .catch(() => {});
+
+    // Load custom scenes
+    AsyncStorage.getItem(SCENES_STORAGE_KEY).then((data) => {
+      if (data) {
+        try {
+          const custom = JSON.parse(data);
+          setScenes([...DEFAULT_SCENES, ...custom]);
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // Load daily schedules
+    AsyncStorage.getItem(SCHEDULES_STORAGE_KEY).then((data) => {
+      if (data) {
+        try {
+          setSchedules(JSON.parse(data));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // Load custom wattage
+    AsyncStorage.getItem(WATTAGE_STORAGE_KEY).then((data) => {
+      if (data) {
+        try {
+          setWattageState(JSON.parse(data));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // Load tariff
+    AsyncStorage.getItem(TARIFF_STORAGE_KEY).then((data) => {
+      if (data) {
+        try {
+          const t = parseFloat(data);
+          if (!isNaN(t)) setTariffState(t);
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // Load energy history
+    AsyncStorage.getItem(ENERGY_STORAGE_KEY).then((data) => {
+      if (data) {
+        try {
+          setEnergyHistory(JSON.parse(data));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // Load night guard
+    AsyncStorage.getItem(NIGHT_GUARD_STORAGE_KEY).then((data) => {
+      if (data) {
+        try {
+          setNightGuardState(JSON.parse(data));
+        } catch {}
+      }
+    }).catch(() => {});
   }, []);
 
   /* Synchronize timers and relay states from storage (handles app restart or returning from background) */
@@ -638,6 +780,10 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const allSet = (v: boolean) => {
+    CHANNELS.forEach((ch) => send(ch.id, v));
+  };
+
   const startTimer = (id: number, minutes: number) => {
     const targetEnd = Date.now() + minutes * 60 * 1000;
     const totalSecs = minutes * 60;
@@ -677,6 +823,253 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     const remainingMinutes = Math.max(1, Math.ceil(remainingSecs / 60));
     sendBleCommand(`TIMER:${id}:${remainingMinutes}`).catch(() => {});
     pub(`${BASE}/relay${id}/timer/set`, String(remainingMinutes));
+  };
+
+  /* Live 1s interval ticker: smooth countdowns, schedules, energy tracking, night guard */
+  useEffect(() => {
+    let tickCount = 0;
+    const interval = setInterval(() => {
+      const currentNow = Date.now();
+      setNow(currentNow);
+      tickCount++;
+
+      // Every 10 seconds: Accumulate energy usage for switches that are currently ON
+      if (tickCount % 10 === 0) {
+        const todayKey = new Date().toISOString().slice(0, 10);
+        let updated = false;
+
+        setEnergyHistory((prev) => {
+          const dayData = { ...(prev[todayKey] || {}) };
+          CHANNELS.forEach((ch) => {
+            if (onRef.current[ch.id]) {
+              dayData[ch.id] = (dayData[ch.id] || 0) + 10;
+              updated = true;
+            }
+          });
+          if (!updated) return prev;
+          const next = { ...prev, [todayKey]: dayData };
+          AsyncStorage.setItem(ENERGY_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+
+        // Check Night Guard
+        if (nightGuard.enabled) {
+          const maxMs = nightGuard.maxHours * 3600 * 1000;
+          CHANNELS.forEach((ch) => {
+            if (onRef.current[ch.id] && since[ch.id]) {
+              const elapsed = currentNow - since[ch.id]!;
+              if (elapsed > maxMs) {
+                console.log(`[NightGuard] Auto-turning off channel ${ch.id} after ${nightGuard.maxHours}h`);
+                send(ch.id, false);
+              }
+            }
+          });
+        }
+      }
+
+      // Check Daily Schedules once every minute
+      const nowObj = new Date();
+      const currentHHMM = `${String(nowObj.getHours()).padStart(2, '0')}:${String(nowObj.getMinutes()).padStart(2, '0')}`;
+      if (currentHHMM !== lastScheduleTriggerMinute.current) {
+        lastScheduleTriggerMinute.current = currentHHMM;
+        const currentDayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][nowObj.getDay()];
+        schedules.forEach((sch) => {
+          if (sch.enabled && sch.time === currentHHMM) {
+            const dayMatches =
+              sch.days.includes('Everyday') ||
+              (sch.days.includes('Weekdays') && nowObj.getDay() >= 1 && nowObj.getDay() <= 5) ||
+              (sch.days.includes('Weekends') && (nowObj.getDay() === 0 || nowObj.getDay() === 6)) ||
+              sch.days.includes(currentDayName);
+            if (dayMatches) {
+              const turnOn = sch.action === 'on';
+              if (sch.channelId === 'all') {
+                allSet(turnOn);
+              } else {
+                send(sch.channelId, turnOn);
+              }
+            }
+          }
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [nightGuard, since, schedules]);
+
+  const addCustomScene = async (newScene: Omit<CustomScene, 'id' | 'isCustom'>) => {
+    const id = `scene_${Date.now()}`;
+    const item: CustomScene = { ...newScene, id, isCustom: true };
+    const nextScenes = [...scenes, item];
+    setScenes(nextScenes);
+    const customOnly = nextScenes.filter((s) => s.isCustom);
+    await AsyncStorage.setItem(SCENES_STORAGE_KEY, JSON.stringify(customOnly));
+  };
+
+  const removeCustomScene = async (id: string) => {
+    const nextScenes = scenes.filter((s) => s.id !== id);
+    setScenes(nextScenes);
+    const customOnly = nextScenes.filter((s) => s.isCustom);
+    await AsyncStorage.setItem(SCENES_STORAGE_KEY, JSON.stringify(customOnly));
+  };
+
+  const activateScene = (scene: CustomScene) => {
+    if (scene.r1 !== undefined) send(1, scene.r1);
+    if (scene.r2 !== undefined) send(2, scene.r2);
+    if (scene.timerMinutes && scene.timerMinutes > 0) {
+      startTimer(1, scene.timerMinutes);
+      startTimer(2, scene.timerMinutes);
+    }
+  };
+
+  const addSchedule = async (newSch: Omit<ScheduleItem, 'id'>) => {
+    const id = `sch_${Date.now()}`;
+    const item: ScheduleItem = { ...newSch, id };
+    const next = [...schedules, item];
+    setSchedules(next);
+    await AsyncStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const toggleSchedule = async (id: string) => {
+    const next = schedules.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s));
+    setSchedules(next);
+    await AsyncStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const removeSchedule = async (id: string) => {
+    const next = schedules.filter((s) => s.id !== id);
+    setSchedules(next);
+    await AsyncStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const setWattage = async (channelId: number, watts: number) => {
+    const next = { ...wattage, [channelId]: watts };
+    setWattageState(next);
+    await AsyncStorage.setItem(WATTAGE_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const setTariff = async (rate: number) => {
+    setTariffState(rate);
+    await AsyncStorage.setItem(TARIFF_STORAGE_KEY, String(rate));
+  };
+
+  const setNightGuard = async (cfg: { enabled: boolean; maxHours: number }) => {
+    setNightGuardState(cfg);
+    await AsyncStorage.setItem(NIGHT_GUARD_STORAGE_KEY, JSON.stringify(cfg));
+  };
+
+  const getTodayStats = (): EnergyStats => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const dayData = energyHistory[todayKey] || {};
+
+    let totalSeconds = 0;
+    let totalKWh = 0;
+    const channelStats: Record<number, { seconds: number; kWh: number; cost: number }> = {};
+
+    CHANNELS.forEach((ch) => {
+      let sec = dayData[ch.id] || 0;
+      if (on[ch.id] && since[ch.id]) {
+        sec += Math.floor((now - since[ch.id]!) / 1000);
+      }
+      const watts = wattage[ch.id] || (ch.id === 1 ? 20 : 40);
+      const kWh = (sec / 3600) * (watts / 1000);
+      const cost = kWh * tariff;
+
+      channelStats[ch.id] = { seconds: sec, kWh, cost };
+      totalSeconds += sec;
+      totalKWh += kWh;
+    });
+
+    const totalCost = totalKWh * tariff;
+    return { totalSeconds, totalKWh, totalCost, channels: channelStats };
+  };
+
+  const getWeeklyStats = (): WeeklyEnergyDay[] => {
+    const days: WeeklyEnergyDay[] = [];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateKey = d.toISOString().slice(0, 10);
+      const dayData = energyHistory[dateKey] || {};
+
+      let daySec = 0;
+      let dayKWh = 0;
+
+      CHANNELS.forEach((ch) => {
+        let sec = dayData[ch.id] || 0;
+        if (i === 0 && on[ch.id] && since[ch.id]) {
+          sec += Math.floor((now - since[ch.id]!) / 1000);
+        }
+        const watts = wattage[ch.id] || (ch.id === 1 ? 20 : 40);
+        daySec += sec;
+        dayKWh += (sec / 3600) * (watts / 1000);
+      });
+
+      const label = i === 0 ? 'Today' : dayNames[d.getDay()];
+      days.push({
+        date: dateKey,
+        dayLabel: label,
+        kWh: dayKWh,
+        cost: dayKWh * tariff,
+        seconds: daySec,
+      });
+    }
+
+    return days;
+  };
+
+  const executeVoiceCommand = (cmd: string): { success: boolean; message: string; action: string } => {
+    const query = cmd.toLowerCase().trim();
+    if (!query) return { success: false, message: 'Please say or select a command', action: 'NONE' };
+
+    if (query.includes('all on') || query.includes('turn on all') || query.includes('yellam on') || query.includes('both on')) {
+      allSet(true);
+      return { success: true, message: 'All lights turned ON', action: 'ALL_ON' };
+    }
+    if (query.includes('all off') || query.includes('turn off all') || query.includes('yellam off') || query.includes('both off')) {
+      allSet(false);
+      return { success: true, message: 'All lights turned OFF', action: 'ALL_OFF' };
+    }
+
+    const ch1Name = (names[1] || 'veli light').toLowerCase();
+    const ch2Name = (names[2] || 'bedroom').toLowerCase();
+
+    const mentions1 = query.includes('1') || query.includes('veli') || query.includes(ch1Name) || query.includes('porch');
+    const mentions2 = query.includes('2') || query.includes('bedroom') || query.includes('living') || query.includes(ch2Name);
+
+    const wantsOff = query.includes('off') || query.includes('aathu') || query.includes('aathi') || query.includes('anaithu');
+
+    if (mentions1) {
+      if (wantsOff) {
+        send(1, false);
+        return { success: true, message: `${names[1]} turned OFF`, action: 'R1_OFF' };
+      }
+      send(1, true);
+      return { success: true, message: `${names[1]} turned ON`, action: 'R1_ON' };
+    }
+
+    if (mentions2) {
+      if (wantsOff) {
+        send(2, false);
+        return { success: true, message: `${names[2]} turned OFF`, action: 'R2_OFF' };
+      }
+      send(2, true);
+      return { success: true, message: `${names[2]} turned ON`, action: 'R2_ON' };
+    }
+
+    if (query.includes('night') || query.includes('sleep') || query.includes('good night')) {
+      allSet(false);
+      return { success: true, message: 'Good night! All lights turned OFF', action: 'NIGHT_SCENE' };
+    }
+
+    if (query.includes('reading') || query.includes('study')) {
+      send(1, true);
+      send(2, false);
+      return { success: true, message: 'Reading scene activated', action: 'READING_SCENE' };
+    }
+
+    return { success: false, message: `Could not recognize "${cmd}". Try "Turn on Veli Light" or "All Off"`, action: 'UNKNOWN' };
   };
 
   const value: Ctx = {
@@ -735,7 +1128,31 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     clearWifi,
     refreshWifi,
     scanWifi,
+
+    // Smart Features
+    scenes,
+    addCustomScene,
+    removeCustomScene,
+    activateScene,
+
+    schedules,
+    addSchedule,
+    toggleSchedule,
+    removeSchedule,
+
+    wattage,
+    setWattage,
+    tariff,
+    setTariff,
+    getTodayStats,
+    getWeeklyStats,
+
+    nightGuard,
+    setNightGuard,
+
+    executeVoiceCommand,
   };
 
   return <HomeCtx.Provider value={value}>{children}</HomeCtx.Provider>;
 }
+

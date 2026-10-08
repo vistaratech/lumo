@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   FadeInDown,
@@ -17,6 +17,8 @@ import { Glow, Press, Ring, Toggle, mmss, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
 import WifiModal from './WifiModal';
+import VoiceModal from './VoiceModal';
+import AddSceneModal from './AddSceneModal';
 
 const sinceLabel = (t: number | null, now: number) => {
   if (!t) return 'Active';
@@ -356,6 +358,8 @@ export default function Home() {
   const allOnActive = onCount === CHANNELS.length && CHANNELS.length > 0;
   const [bleModalOpen, setBleModalOpen] = useState(false);
   const [wifiModalOpen, setWifiModalOpen] = useState(false);
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+  const [addSceneOpen, setAddSceneOpen] = useState(false);
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
@@ -369,6 +373,23 @@ export default function Home() {
           </View>
         </View>
         <View style={s.topActions}>
+          <Press
+            onPress={() => {
+              tap();
+              setVoiceModalOpen(true);
+            }}
+            style={[
+              s.voiceBtn,
+              {
+                backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#E0F2FE',
+                borderColor: '#38BDF8',
+              },
+            ]}
+          >
+            <Ionicons name="mic" size={14} color="#38BDF8" />
+            <Text style={s.voiceBtnText}>Voice</Text>
+          </Press>
+
           <WifiButton
             wifiStatus={h.wifiStatus}
             wifiSsid={h.wifiSsid}
@@ -484,52 +505,42 @@ export default function Home() {
       <Animated.View entering={FadeInDown.delay(180).duration(450)} style={s.scenesContainer}>
         <Text style={[s.sectionTitle, { color: colors.dim }]}>QUICK SCENES</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scenesRow}>
-          <Press
-            onPress={() => {
-              tap();
-              h.allSet(false);
-            }}
-            style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
-          >
-            <Ionicons name="power" size={15} color="#F43F5E" />
-            <Text style={[s.sceneChipText, { color: colors.text }]}>All Off</Text>
-          </Press>
+          {h.scenes.map((sc) => (
+            <Pressable
+              key={sc.id}
+              onPress={() => {
+                tap();
+                h.activateScene(sc);
+              }}
+              onLongPress={() => {
+                if (sc.isCustom) {
+                  tap();
+                  h.removeCustomScene(sc.id);
+                }
+              }}
+              style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            >
+              <Ionicons name={sc.icon as any} size={15} color={sc.color || colors.lamp} />
+              <Text style={[s.sceneChipText, { color: colors.text }]}>{sc.name}</Text>
+            </Pressable>
+          ))}
 
           <Press
             onPress={() => {
               tap();
-              h.allSet(true);
+              setAddSceneOpen(true);
             }}
-            style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            style={[
+              s.sceneChip,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.lamp,
+                borderStyle: 'dashed',
+              },
+            ]}
           >
-            <Ionicons name="sunny" size={15} color="#FF9500" />
-            <Text style={[s.sceneChipText, { color: colors.text }]}>Full Light</Text>
-          </Press>
-
-          <Press
-            onPress={() => {
-              tap();
-              // Night Comfort: Turn off Switch 1, turn on Switch 2 with 30m timer
-              h.toggle(1);
-              if (h.on[1]) h.send(1, false);
-              h.startTimer(2, 30);
-            }}
-            style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
-          >
-            <Ionicons name="bed-outline" size={15} color="#06D6A0" />
-            <Text style={[s.sceneChipText, { color: colors.text }]}>Night (30m)</Text>
-          </Press>
-
-          <Press
-            onPress={() => {
-              tap();
-              // Focus: Switch 1 with 45m timer
-              h.startTimer(1, 45);
-            }}
-            style={[s.sceneChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
-          >
-            <Ionicons name="book-outline" size={15} color="#8B5CF6" />
-            <Text style={[s.sceneChipText, { color: colors.text }]}>Focus (45m)</Text>
+            <Ionicons name="add" size={15} color={colors.lamp} />
+            <Text style={[s.sceneChipText, { color: colors.lamp }]}>+ Custom</Text>
           </Press>
         </ScrollView>
       </Animated.View>
@@ -549,6 +560,18 @@ export default function Home() {
           <Tile key={ch.id} channel={ch} index={i} />
         ))}
       </View>
+
+      {/* Voice Assistant Modal */}
+      <VoiceModal
+        visible={voiceModalOpen}
+        onClose={() => setVoiceModalOpen(false)}
+      />
+
+      {/* Add Custom Scene Modal */}
+      <AddSceneModal
+        visible={addSceneOpen}
+        onClose={() => setAddSceneOpen(false)}
+      />
 
       {/* Bluetooth Discovery & Pairing Modal */}
       <BluetoothModal
@@ -581,6 +604,20 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingTop: 6,
+  },
+  voiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  voiceBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#38BDF8',
   },
   connectBtn: {
     flexDirection: 'row',

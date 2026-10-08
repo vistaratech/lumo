@@ -3,8 +3,9 @@ import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { CHANNELS } from './config';
-import { Header, Press, Ring, mmss, tap } from './theme';
-import { useHome } from './useHome';
+import { Header, Press, Ring, Toggle, mmss, tap } from './theme';
+import { ScheduleItem, useHome } from './useHome';
+import AddScheduleModal from './AddScheduleModal';
 
 const PRESETS = [
   { min: 5, label: '5 min' },
@@ -261,20 +262,187 @@ function TimerCard({ channel, index }: { channel: (typeof CHANNELS)[number]; ind
   );
 }
 
+const format12h = (time24: string) => {
+  const [hStr, mStr] = time24.split(':');
+  let h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+};
+
+function ScheduleCard({ item, index }: { item: ScheduleItem; index: number }) {
+  const h = useHome();
+  const colors = h.colors;
+  const isDark = h.isDark;
+
+  const targetLabel = item.channelId === 'all' ? 'Both Switches' : h.names[item.channelId as number] || `Switch ${item.channelId}`;
+  const isTurnOn = item.action === 'on';
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(60 + index * 40).duration(280)}
+      style={[
+        s.routineCard,
+        {
+          backgroundColor: colors.card,
+          borderColor: item.enabled ? (isTurnOn ? (isDark ? '#7C4B18' : '#FED7AA') : colors.line) : colors.line,
+          opacity: item.enabled ? 1 : 0.6,
+        },
+      ]}
+    >
+      <View style={s.routineLeft}>
+        <View
+          style={[
+            s.routineIconWrap,
+            {
+              backgroundColor: isTurnOn ? 'rgba(255, 159, 28, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+            },
+          ]}
+        >
+          <Ionicons
+            name={isTurnOn ? 'sunny-outline' : 'power-outline'}
+            size={20}
+            color={isTurnOn ? colors.lamp : colors.bad}
+          />
+        </View>
+
+        <View style={s.routineTextCol}>
+          <Text style={[s.routineTime, { color: colors.text }]}>{format12h(item.time)}</Text>
+          <Text style={[s.routineName, { color: colors.text }]}>{item.name}</Text>
+          <View style={s.routinePillsRow}>
+            <View style={[s.routinePill, { backgroundColor: colors.surface }]}>
+              <Text style={[s.routinePillText, { color: colors.dim }]}>{targetLabel}</Text>
+            </View>
+            <View style={[s.routinePill, { backgroundColor: colors.surface }]}>
+              <Text style={[s.routinePillText, { color: isTurnOn ? colors.ok : colors.bad }]}>
+                {isTurnOn ? 'Turn ON' : 'Turn OFF'}
+              </Text>
+            </View>
+            <View style={[s.routinePill, { backgroundColor: colors.surface }]}>
+              <Text style={[s.routinePillText, { color: colors.dim }]}>{item.days.join(', ')}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={s.routineRight}>
+        <Press
+          onPress={() => {
+            tap();
+            h.toggleSchedule(item.id);
+          }}
+        >
+          <Toggle value={item.enabled} colors={colors} activeColor={colors.lamp} />
+        </Press>
+
+        <Press
+          onPress={() => {
+            tap();
+            h.removeSchedule(item.id);
+          }}
+          style={s.deleteRoutineBtn}
+        >
+          <Ionicons name="trash-outline" size={17} color={colors.dimmer} />
+        </Press>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function Timers() {
-  const { colors } = useHome();
+  const h = useHome();
+  const colors = h.colors;
+  const [tab, setTab] = useState<'countdown' | 'routines'>('countdown');
+  const [addScheduleOpen, setAddScheduleOpen] = useState(false);
+
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
       <Header
         title="Timers"
-        sub="Auto-off countdowns for your switches"
+        sub={tab === 'countdown' ? 'Auto-off countdowns for your switches' : 'Daily automatic routines & schedules'}
         colors={colors}
       />
-      <View style={s.list}>
-        {CHANNELS.map((ch, i) => (
-          <TimerCard key={ch.id} channel={ch} index={i} />
-        ))}
+
+      {/* Segment Selector: Timers vs Daily Routines */}
+      <View style={s.segmentRow}>
+        <Press
+          onPress={() => {
+            tap();
+            setTab('countdown');
+          }}
+          style={[
+            s.segmentTab,
+            tab === 'countdown' && {
+              backgroundColor: colors.card,
+              borderColor: colors.lamp,
+              shadowColor: colors.lamp,
+              shadowOpacity: 0.12,
+              shadowRadius: 6,
+              elevation: 2,
+            },
+            { borderColor: colors.line },
+          ]}
+        >
+          <Ionicons name="timer-outline" size={16} color={tab === 'countdown' ? colors.lamp : colors.dim} />
+          <Text style={[s.segmentTabText, { color: tab === 'countdown' ? colors.text : colors.dim }]}>
+            Countdown Timers
+          </Text>
+        </Press>
+
+        <Press
+          onPress={() => {
+            tap();
+            setTab('routines');
+          }}
+          style={[
+            s.segmentTab,
+            tab === 'routines' && {
+              backgroundColor: colors.card,
+              borderColor: colors.lamp,
+              shadowColor: colors.lamp,
+              shadowOpacity: 0.12,
+              shadowRadius: 6,
+              elevation: 2,
+            },
+            { borderColor: colors.line },
+          ]}
+        >
+          <Ionicons name="calendar-outline" size={16} color={tab === 'routines' ? colors.lamp : colors.dim} />
+          <Text style={[s.segmentTabText, { color: tab === 'routines' ? colors.text : colors.dim }]}>
+            Daily Routines
+          </Text>
+        </Press>
       </View>
+
+      {tab === 'countdown' ? (
+        <View style={s.list}>
+          {CHANNELS.map((ch, i) => (
+            <TimerCard key={ch.id} channel={ch} index={i} />
+          ))}
+        </View>
+      ) : (
+        <View style={s.list}>
+          {h.schedules.map((sch, i) => (
+            <ScheduleCard key={sch.id} item={sch} index={i} />
+          ))}
+
+          {/* Add Routine Button */}
+          <Press
+            onPress={() => {
+              tap();
+              setAddScheduleOpen(true);
+            }}
+            style={[s.addRoutineBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+          >
+            <Ionicons name="add-circle-outline" size={20} color={colors.lamp} />
+            <Text style={[s.addRoutineText, { color: colors.text }]}>Add New Routine</Text>
+          </Press>
+        </View>
+      )}
+
+      <AddScheduleModal visible={addScheduleOpen} onClose={() => setAddScheduleOpen(false)} />
     </ScrollView>
   );
 }
@@ -494,4 +662,104 @@ const s = StyleSheet.create({
     borderRadius: 14,
   },
   startText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+
+  /* Segment Selector */
+  segmentRow: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    gap: 8,
+  },
+  segmentTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  segmentTabText: {
+    fontSize: 13,
+    fontWeight: '300',
+    letterSpacing: -0.2,
+  },
+
+  /* Routine Card */
+  routineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 16,
+  },
+  routineLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  routineIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  routineTextCol: {
+    flex: 1,
+  },
+  routineTime: {
+    fontSize: 22,
+    fontWeight: '300',
+    letterSpacing: -0.6,
+  },
+  routineName: {
+    fontSize: 14,
+    fontWeight: '300',
+    marginTop: 2,
+    letterSpacing: -0.2,
+  },
+  routinePillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  routinePill: {
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderRadius: 8,
+  },
+  routinePillText: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  routineRight: {
+    alignItems: 'flex-end',
+    gap: 12,
+    marginLeft: 8,
+  },
+  deleteRoutineBtn: {
+    padding: 6,
+  },
+  addRoutineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 20,
+    paddingVertical: 16,
+    marginTop: 4,
+  },
+  addRoutineText: {
+    fontSize: 14,
+    fontWeight: '300',
+    letterSpacing: -0.2,
+  },
 });
+

@@ -24,6 +24,7 @@ import { HomeProvider, useHome } from './src/useHome';
 import Splash from './src/Splash';
 import Home from './src/Home';
 import Timers from './src/Timers';
+import Energy from './src/Energy';
 import Settings from './src/Settings';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -31,6 +32,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 const TABS = [
   { label: 'Home', icon: 'home', outline: 'home-outline', Screen: Home, color: '#FF9500' },
   { label: 'Timers', icon: 'timer', outline: 'timer-outline', Screen: Timers, color: '#06D6A0' },
+  { label: 'Energy', icon: 'flash', outline: 'flash-outline', Screen: Energy, color: '#38BDF8' },
   { label: 'Settings', icon: 'settings', outline: 'settings-outline', Screen: Settings, color: '#8B5CF6' },
 ] as const;
 
@@ -57,9 +59,9 @@ function TabButton({
   return (
     <Pressable style={s.tabBtn} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
       <Animated.View style={icon}>
-        <Ionicons name={(active ? t.icon : t.outline) as any} size={22} color={tabColor} />
+        <Ionicons name={(active ? t.icon : t.outline) as any} size={21} color={tabColor} />
       </Animated.View>
-      <Text style={[s.tabLabel, { color: tabColor }, active && { fontWeight: '700' }]}>{t.label}</Text>
+      <Text style={[s.tabLabel, { color: tabColor }, active && { fontWeight: '500' }]}>{t.label}</Text>
     </Pressable>
   );
 }

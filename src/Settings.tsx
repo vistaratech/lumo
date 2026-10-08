@@ -324,9 +324,85 @@ export default function Settings() {
         </Press>
       </Section>
 
-      {/* System Status Section with Interactive Bluetooth Discovery */}
+      {/* Safety & Night Guard Section */}
       <Section
         i={3}
+        title="SAFETY & NIGHT GUARD"
+        icon="shield-outline"
+        iconColor="#38BDF8"
+        dimColor={colors.dim}
+        colors={colors}
+      >
+        <Press
+          style={[
+            s.row,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.line,
+              shadowColor: '#000',
+              shadowOpacity: 0.05,
+              shadowOffset: { width: 0, height: 2 },
+              shadowRadius: 6,
+              elevation: 2,
+            },
+          ]}
+          onPress={() => {
+            tap();
+            h.setNightGuard({
+              enabled: !h.nightGuard.enabled,
+              maxHours: h.nightGuard.maxHours,
+            });
+          }}
+        >
+          <View style={s.rowLeft}>
+            <View style={[s.rowIconBox, { backgroundColor: '#38BDF818' }]}>
+              <Ionicons name="moon-outline" size={16} color="#38BDF8" />
+            </View>
+            <View>
+              <Text style={[s.rowLabel, { color: colors.text }]}>Auto-Off Protection</Text>
+              <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
+                Turn off lights left on continuously
+              </Text>
+            </View>
+          </View>
+          <Toggle value={h.nightGuard.enabled} colors={colors} activeColor="#38BDF8" />
+        </Press>
+
+        {h.nightGuard.enabled && (
+          <View style={[s.nightGuardPillsRow, { backgroundColor: colors.card, borderColor: colors.line }]}>
+            <Text style={[s.nightGuardLabel, { color: colors.dim }]}>MAX RUNTIME LIMIT:</Text>
+            <View style={s.hoursRow}>
+              {[1, 2, 4, 8].map((hrs) => {
+                const active = h.nightGuard.maxHours === hrs;
+                return (
+                  <Press
+                    key={hrs}
+                    onPress={() => {
+                      tap();
+                      h.setNightGuard({ enabled: true, maxHours: hrs });
+                    }}
+                    style={[
+                      s.hourPill,
+                      {
+                        backgroundColor: active ? 'rgba(56, 189, 248, 0.2)' : colors.surface,
+                        borderColor: active ? '#38BDF8' : colors.line,
+                      },
+                    ]}
+                  >
+                    <Text style={[s.hourText, { color: active ? '#38BDF8' : colors.dim }]}>
+                      {hrs} hr{hrs > 1 ? 's' : ''}
+                    </Text>
+                  </Press>
+                );
+              })}
+            </View>
+          </View>
+        )}
+      </Section>
+
+      {/* System Status Section with Interactive Bluetooth Discovery */}
+      <Section
+        i={4}
         title="SYSTEM STATUS"
         icon="shield-checkmark"
         iconColor="#06D6A0"
@@ -563,4 +639,32 @@ const s = StyleSheet.create({
   },
   rowLabel: { fontSize: 15, fontWeight: '600' },
   rowValue: { fontSize: 14, maxWidth: '50%' },
+  nightGuardPillsRow: {
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: 14,
+    marginTop: 8,
+  },
+  nightGuardLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  hoursRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  hourPill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  hourText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
 });
