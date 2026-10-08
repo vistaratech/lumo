@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -69,170 +71,183 @@ export default function EditSwitchModal({ visible, channelId, onClose }: EditSwi
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.overlay}>
-        {/* Backdrop tap to dismiss */}
+        {/* Backdrop dismiss */}
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        <Animated.View
-          entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
-          style={[
-            s.sheet,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.line,
-              paddingBottom: Math.max(insets.bottom, 16) + 12,
-            },
-          ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={s.keyboardAvoid}
         >
-          {/* Top Grabber Handle */}
-          <View style={[s.handle, { backgroundColor: colors.line }]} />
+          <Animated.View
+            entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
+            style={[
+              s.sheet,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.line,
+                paddingBottom: Math.max(insets.bottom, 20),
+              },
+            ]}
+          >
+            {/* Top Grabber Handle */}
+            <View style={[s.handle, { backgroundColor: colors.line }]} />
 
-          {/* Modal Header */}
-          <View style={s.header}>
-            <View style={s.headerLeft}>
-              <View style={[s.iconBadge, { backgroundColor: `${accentColor}18` }]}>
-                <Ionicons name={channel.icon as any} size={20} color={accentColor} />
+            {/* Modal Header */}
+            <View style={s.header}>
+              <View style={s.headerLeft}>
+                <View style={[s.iconBadge, { backgroundColor: `${accentColor}18` }]}>
+                  <Ionicons name={channel.icon as any} size={20} color={accentColor} />
+                </View>
+                <View>
+                  <Text style={[s.title, { color: colors.text }]}>Edit Switch & Room</Text>
+                  <Text style={[s.subtitle, { color: colors.dim }]}>
+                    Switch {channelId} • Relay Channel {channelId}
+                  </Text>
+                </View>
               </View>
-              <View>
-                <Text style={[s.title, { color: colors.text }]}>Edit Switch & Room</Text>
-                <Text style={[s.subtitle, { color: colors.dim }]}>
-                  Switch {channelId} • Relay Channel {channelId}
-                </Text>
-              </View>
+
+              <Press onPress={onClose} style={[s.closeBtn, { backgroundColor: colors.surface }]}>
+                <Ionicons name="close" size={18} color={colors.dim} />
+              </Press>
             </View>
 
-            <Press onPress={onClose} style={[s.closeBtn, { backgroundColor: colors.surface }]}>
-              <Ionicons name="close" size={18} color={colors.dim} />
-            </Press>
-          </View>
-
-          {/* Switch Name Input */}
-          <View style={s.fieldGroup}>
-            <View style={s.labelRow}>
-              <Text style={[s.label, { color: colors.dim }]}>SWITCH NAME</Text>
-              <Text style={[s.charCount, { color: colors.dimmer }]}>{name.length}/20</Text>
-            </View>
-            <View
-              style={[
-                s.inputWrap,
-                { backgroundColor: colors.surface, borderColor: colors.line },
-              ]}
-            >
-              <Ionicons name="pricetag-outline" size={17} color={accentColor} />
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                maxLength={20}
-                placeholder={`Switch ${channelId}`}
-                placeholderTextColor={colors.dimmer}
-                selectionColor={accentColor}
-                style={[s.input, { color: colors.text }]}
-              />
-              {name.length > 0 && (
-                <Press onPress={() => setName('')} style={s.clearBtn}>
-                  <Ionicons name="close-circle" size={16} color={colors.dim} />
-                </Press>
-              )}
-            </View>
-          </View>
-
-          {/* Assigned Room Input */}
-          <View style={s.fieldGroup}>
-            <View style={s.labelRow}>
-              <Text style={[s.label, { color: colors.dim }]}>ASSIGNED ROOM</Text>
-              <Text style={[s.charCount, { color: colors.dimmer }]}>{room.length}/20</Text>
-            </View>
-            <View
-              style={[
-                s.inputWrap,
-                { backgroundColor: colors.surface, borderColor: colors.line },
-              ]}
-            >
-              <Ionicons name="home-outline" size={17} color={accentColor} />
-              <TextInput
-                value={room}
-                onChangeText={setRoom}
-                maxLength={20}
-                placeholder="e.g. Living Room, Bedroom"
-                placeholderTextColor={colors.dimmer}
-                selectionColor={accentColor}
-                style={[s.input, { color: colors.text }]}
-              />
-              {room.length > 0 && (
-                <Press onPress={() => setRoom('')} style={s.clearBtn}>
-                  <Ionicons name="close-circle" size={16} color={colors.dim} />
-                </Press>
-              )}
-            </View>
-          </View>
-
-          {/* Quick Room Preset Chips (Horizontal Swipeable Row) */}
-          <View style={s.presetSection}>
-            <Text style={[s.quickLabel, { color: colors.dim }]}>QUICK ROOM PRESETS</Text>
+            {/* Fields Container */}
             <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={s.chipsRow}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={s.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              bounces={false}
             >
-              {ROOM_PRESETS.map((preset) => {
-                const isSelected = room.trim().toLowerCase() === preset.toLowerCase();
-                return (
-                  <Press
-                    key={preset}
-                    onPress={() => {
-                      tap();
-                      setRoom(preset);
-                    }}
-                    style={[
-                      s.chip,
-                      {
-                        backgroundColor: isSelected ? `${accentColor}25` : colors.surface,
-                        borderColor: isSelected ? accentColor : colors.line,
-                      },
-                    ]}
-                  >
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={13}
-                        color={accentColor}
-                        style={{ marginRight: 4 }}
-                      />
-                    )}
-                    <Text
-                      style={[
-                        s.chipText,
-                        {
-                          color: isSelected ? accentColor : colors.text,
-                          fontWeight: isSelected ? '700' : '500',
-                        },
-                      ]}
-                    >
-                      {preset}
-                    </Text>
-                  </Press>
-                );
-              })}
+              {/* Switch Name Input */}
+              <View style={s.fieldGroup}>
+                <View style={s.labelRow}>
+                  <Text style={[s.label, { color: colors.dim }]}>SWITCH NAME</Text>
+                  <Text style={[s.charCount, { color: colors.dimmer }]}>{name.length}/20</Text>
+                </View>
+                <View
+                  style={[
+                    s.inputWrap,
+                    { backgroundColor: colors.surface, borderColor: colors.line },
+                  ]}
+                >
+                  <Ionicons name="pricetag-outline" size={17} color={accentColor} />
+                  <TextInput
+                    value={name}
+                    onChangeText={setName}
+                    maxLength={20}
+                    placeholder={`e.g. ${channel.name}`}
+                    placeholderTextColor={colors.dimmer}
+                    selectionColor={accentColor}
+                    style={[s.input, { color: colors.text }]}
+                  />
+                  {name.length > 0 && (
+                    <Press onPress={() => setName('')} style={s.clearBtn}>
+                      <Ionicons name="close-circle" size={16} color={colors.dim} />
+                    </Press>
+                  )}
+                </View>
+              </View>
+
+              {/* Assigned Room Input */}
+              <View style={s.fieldGroup}>
+                <View style={s.labelRow}>
+                  <Text style={[s.label, { color: colors.dim }]}>ASSIGNED ROOM</Text>
+                  <Text style={[s.charCount, { color: colors.dimmer }]}>{room.length}/20</Text>
+                </View>
+                <View
+                  style={[
+                    s.inputWrap,
+                    { backgroundColor: colors.surface, borderColor: colors.line },
+                  ]}
+                >
+                  <Ionicons name="home-outline" size={17} color={accentColor} />
+                  <TextInput
+                    value={room}
+                    onChangeText={setRoom}
+                    maxLength={20}
+                    placeholder="e.g. Living Room, Bedroom"
+                    placeholderTextColor={colors.dimmer}
+                    selectionColor={accentColor}
+                    style={[s.input, { color: colors.text }]}
+                  />
+                  {room.length > 0 && (
+                    <Press onPress={() => setRoom('')} style={s.clearBtn}>
+                      <Ionicons name="close-circle" size={16} color={colors.dim} />
+                    </Press>
+                  )}
+                </View>
+              </View>
+
+              {/* Quick Room Preset Chips — Horizontal Scroll */}
+              <View style={s.presetSection}>
+                <Text style={[s.quickLabel, { color: colors.dim }]}>QUICK ROOM PRESETS</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={s.chipsRow}
+                >
+                  {ROOM_PRESETS.map((preset) => {
+                    const isSelected = room.trim().toLowerCase() === preset.toLowerCase();
+                    return (
+                      <Press
+                        key={preset}
+                        onPress={() => {
+                          tap();
+                          setRoom(preset);
+                        }}
+                        style={[
+                          s.chip,
+                          {
+                            backgroundColor: isSelected ? `${accentColor}25` : colors.surface,
+                            borderColor: isSelected ? accentColor : colors.line,
+                          },
+                        ]}
+                      >
+                        {isSelected && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={13}
+                            color={accentColor}
+                            style={{ marginRight: 4 }}
+                          />
+                        )}
+                        <Text
+                          style={[
+                            s.chipText,
+                            {
+                              color: isSelected ? accentColor : colors.text,
+                              fontWeight: isSelected ? '700' : '500',
+                            },
+                          ]}
+                        >
+                          {preset}
+                        </Text>
+                      </Press>
+                    );
+                  })}
+                </ScrollView>
+              </View>
             </ScrollView>
-          </View>
 
-          {/* Action Buttons: Cancel & Save Changes */}
-          <View style={s.actionsRow}>
-            <Press
-              onPress={onClose}
-              style={[s.btnCancel, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            >
-              <Text style={[s.btnCancelText, { color: colors.dim }]}>Cancel</Text>
-            </Press>
+            {/* Pinned Action Buttons — ALWAYS VISIBLE at bottom! */}
+            <View style={s.actionsRow}>
+              <Press
+                onPress={onClose}
+                style={[s.btnCancel, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              >
+                <Text style={[s.btnCancelText, { color: colors.dim }]}>Cancel</Text>
+              </Press>
 
-            <Press
-              onPress={handleSave}
-              style={[s.btnSave, { backgroundColor: accentColor }]}
-            >
-              <Ionicons name="checkmark-sharp" size={18} color="#080D18" style={{ marginRight: 6 }} />
-              <Text style={s.btnSaveText}>Save Changes</Text>
-            </Press>
-          </View>
-        </Animated.View>
+              <Press
+                onPress={handleSave}
+                style={[s.btnSave, { backgroundColor: accentColor }]}
+              >
+                <Ionicons name="checkmark-sharp" size={18} color="#080D18" style={{ marginRight: 6 }} />
+                <Text style={s.btnSaveText}>Save Changes</Text>
+              </Press>
+            </View>
+          </Animated.View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -244,33 +259,34 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'flex-end',
   },
-  sheet: {
+  keyboardAvoid: {
     width: '100%',
+  },
+  sheet: {
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: 1.5,
     borderBottomWidth: 0,
     paddingHorizontal: 20,
     paddingTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-    elevation: 20,
-    gap: 12,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 12,
+    maxHeight: '88%',
   },
   handle: {
     width: 42,
     height: 4.5,
     borderRadius: 2.5,
     alignSelf: 'center',
-    marginBottom: 4,
+    marginBottom: 16,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 2,
+    marginBottom: 16,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -278,9 +294,9 @@ const s = StyleSheet.create({
     gap: 12,
   },
   iconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -301,8 +317,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  scrollContent: {
+    gap: 14,
+    paddingBottom: 10,
+  },
   fieldGroup: {
-    gap: 5,
+    gap: 6,
   },
   labelRow: {
     flexDirection: 'row',
@@ -322,10 +342,10 @@ const s = StyleSheet.create({
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 15,
+    borderRadius: 16,
     borderWidth: 1.5,
     paddingHorizontal: 14,
-    height: 46,
+    height: 48,
     gap: 10,
   },
   input: {
@@ -337,10 +357,11 @@ const s = StyleSheet.create({
     padding: 4,
   },
   presetSection: {
-    gap: 5,
+    gap: 6,
+    marginTop: 2,
   },
   quickLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
     marginLeft: 2,
@@ -348,7 +369,7 @@ const s = StyleSheet.create({
   chipsRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   chip: {
     flexDirection: 'row',
@@ -356,7 +377,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
   chipText: {
     fontSize: 12,
@@ -364,7 +385,8 @@ const s = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 6,
+    paddingTop: 14,
+    marginTop: 4,
   },
   btnCancel: {
     flex: 1,

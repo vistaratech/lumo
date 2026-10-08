@@ -30,9 +30,23 @@ interface FeatureItem {
 
 const V20_FEATURES: FeatureItem[] = [
   {
+    icon: 'home-outline',
+    color: '#FF9500',
+    tag: 'NEW IN v2.0.3',
+    title: 'Switch & Room Assignment with Quick Presets',
+    desc: 'Customize which room each switch belongs to (Living Room, Bedroom, Kitchen, etc.) with 1-tap quick presets or custom names.',
+  },
+  {
+    icon: 'notifications-outline',
+    color: '#F59E0B',
+    tag: 'NEW IN v2.0.3',
+    title: 'Daily Smart Notifications & Remote Push Alerts',
+    desc: 'Receive bedtime 10:00 PM power-saving reminders, morning digests, timer completion alerts, and admin broadcast announcements.',
+  },
+  {
     icon: 'wifi',
     color: '#06D6A0',
-    tag: 'NEW FEATURE',
+    tag: 'FEATURE',
     title: 'In-App 2.4 GHz Wi-Fi Live Scanner',
     desc: 'Scan nearby Wi-Fi networks in real-time, view live signal bars (RSSI), and configure your ESP32 with 1-tap seamless pairing.',
   },
@@ -141,8 +155,8 @@ export default function WhatsNewModal({ visible, onClose }: WhatsNewModalProps) 
                 <Ionicons name="rocket-outline" size={18} color="#8B5CF6" />
               </View>
               <View>
-                <Text style={[s.title, { color: colors.text }]}>What's New in v2.0</Text>
-                <Text style={[s.sub, { color: colors.dim }]}>Major Release • Hardware & Cloud Upgrades</Text>
+                <Text style={[s.title, { color: colors.text }]}>What's New in v2.0.3</Text>
+                <Text style={[s.sub, { color: colors.dim }]}>Room Management & Smart Notifications</Text>
               </View>
             </View>
 
@@ -175,15 +189,15 @@ export default function WhatsNewModal({ visible, onClose }: WhatsNewModalProps) 
               <View style={s.heroTop}>
                 <View style={s.versionPill}>
                   <Ionicons name="sparkles" size={12} color="#F59E0B" />
-                  <Text style={s.versionPillText}>v2.0.0 Official Release</Text>
+                  <Text style={s.versionPillText}>v2.0.3 Official Release</Text>
                 </View>
-                <Text style={[s.heroDate, { color: colors.dim }]}>Build 2.0.0 Stable</Text>
+                <Text style={[s.heroDate, { color: colors.dim }]}>Build 2.0.3 Stable</Text>
               </View>
               <Text style={[s.heroTitle, { color: colors.text }]}>
-                Next-Gen Hybrid Wi-Fi, BLE & Cloud Control
+                Custom Room Setup & Smart Mobile Alerts
               </Text>
               <Text style={[s.heroDesc, { color: colors.dim }]}>
-                Lumo v2.0 brings complete in-app ESP32 Wi-Fi setup, worldwide cellular access over SIM data, permanent flash storage, and silky-smooth Apple easing.
+                Lumo v2.0.3 introduces personalized room assignment per switch, scheduled bedtime power checks, timer finished alerts, and admin remote push notifications.
               </Text>
             </View>
 

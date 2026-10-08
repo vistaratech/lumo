@@ -133,7 +133,7 @@ export default function Splash({ onFinish }: { onFinish: () => void }) {
           entering={FadeInDown.delay(850).duration(500)}
           style={[s.subName, { color: colors.dim }]}
         >
-          Smart Home Control • v2.0
+          Smart Home Control • v2.0.3
         </Animated.Text>
       </View>
 

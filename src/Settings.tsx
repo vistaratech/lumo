@@ -921,7 +921,7 @@ export default function Settings() {
             icon="sparkles-outline"
             iconColor="#A855F7"
             label="App Version"
-            value="v2.0 (Build 2.0.0)"
+            value="v2.0.3 (Build 2.0.3)"
             valueColor="#A855F7"
             cardBg={colors.card}
             lineColor={colors.line}
