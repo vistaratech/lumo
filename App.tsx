@@ -26,6 +26,7 @@ import Home from './src/Home';
 import Timers from './src/Timers';
 import Energy from './src/Energy';
 import Settings from './src/Settings';
+import AuthModal from './src/AuthModal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -186,6 +187,8 @@ function Shell() {
           setTab(i);
         }}
       />
+
+      <AuthModal visible={h.authModalOpen} onClose={h.closeAuthModal} canDismiss={true} />
     </Animated.View>
   );
 }

@@ -369,11 +369,49 @@ export default function Home() {
           <Text style={[s.headerTitle, { color: colors.text }]}>Home</Text>
           <View style={s.greetingRow}>
             <Ionicons name={greetingIcon as any} size={15} color={greetingColor} />
-            <Text style={[s.greeting, { color: colors.dim }]}>{greeting}</Text>
+            <Text style={[s.greeting, { color: colors.dim }]}>
+              {h.user && !h.user.isGuest ? `${greeting}, ${h.user.displayName}` : greeting}
+            </Text>
           </View>
         </View>
 
         <View style={s.topActionsRow}>
+          <Press
+            onPress={() => {
+              tap();
+              h.openAuthModal();
+            }}
+            style={[
+              s.voiceBtn,
+              {
+                backgroundColor:
+                  h.user && !h.user.isGuest
+                    ? isDark
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : '#ECFDF5'
+                    : isDark
+                    ? 'rgba(255, 159, 28, 0.12)'
+                    : '#FFF7ED',
+                borderColor: h.user && !h.user.isGuest ? '#10B981' : colors.lamp,
+              },
+            ]}
+          >
+            <Ionicons
+              name={h.user && !h.user.isGuest ? 'shield-checkmark' : 'person-circle-outline'}
+              size={13}
+              color={h.user && !h.user.isGuest ? '#10B981' : colors.lamp}
+            />
+            <Text
+              style={[
+                s.voiceBtnText,
+                { color: h.user && !h.user.isGuest ? '#10B981' : colors.lamp },
+              ]}
+              numberOfLines={1}
+            >
+              {h.user && !h.user.isGuest ? h.user.displayName.split(' ')[0] : 'Account'}
+            </Text>
+          </Press>
+
           <Press
             onPress={() => {
               tap();

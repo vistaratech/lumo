@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE, BROKER, CHANNELS } from './config';
 import { ThemeColors, ThemeMode, darkColors, feel, lightColors, notify } from './theme';
 import { addBleDataListener, addBleListener, autoReconnectBle, isBleConnected, sendBleCommand } from './bluetooth';
+import { LumoUser, addAuthListener, initAuth, signOut as authSignOut, getUserMqttPrefix } from './auth';
 
 type Rec<T> = Record<number, T>;
 
@@ -110,6 +111,13 @@ type Ctx = {
   setNightGuard: (cfg: { enabled: boolean; maxHours: number }) => Promise<void>;
 
   executeVoiceCommand: (cmd: string) => { success: boolean; message: string; action: string };
+
+  // Customer Account & Household Auth
+  user: LumoUser | null;
+  authModalOpen: boolean;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
+  signOutUser: () => Promise<void>;
 };
 
 const HomeCtx = createContext<Ctx>({} as Ctx);
@@ -223,6 +231,22 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   const [energyHistory, setEnergyHistory] = useState<Record<string, Record<number, number>>>({});
   const [nightGuard, setNightGuardState] = useState<{ enabled: boolean; maxHours: number }>({ enabled: false, maxHours: 4 });
   const lastScheduleTriggerMinute = useRef<string>('');
+
+  // Customer Account & Household Auth State
+  const [user, setUser] = useState<LumoUser | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  useEffect(() => {
+    initAuth().then((u) => setUser(u)).catch(() => {});
+    const unsub = addAuthListener((u) => setUser(u));
+    return unsub;
+  }, []);
+
+  const openAuthModal = () => setAuthModalOpen(true);
+  const closeAuthModal = () => setAuthModalOpen(false);
+  const signOutUser = async () => {
+    await authSignOut();
+  };
 
   /* Load cached Wi-Fi SSID and Smart Home Features from storage */
   useEffect(() => {
@@ -1151,6 +1175,13 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     setNightGuard,
 
     executeVoiceCommand,
+
+    // Customer Account
+    user,
+    authModalOpen,
+    openAuthModal,
+    closeAuthModal,
+    signOutUser,
   };
 
   return <HomeCtx.Provider value={value}>{children}</HomeCtx.Provider>;

@@ -242,6 +242,112 @@ function StatusRow({
   );
 }
 
+function AccountCard() {
+  const h = useHome();
+  const colors = h.colors;
+  const user = h.user;
+  const isGuest = !user || user.isGuest;
+
+  return (
+    <View
+      style={[
+        s.accountCard,
+        {
+          backgroundColor: colors.card,
+          borderColor: isGuest ? colors.line : `${colors.lamp}40`,
+        },
+      ]}
+    >
+      <View style={s.accountTop}>
+        <View
+          style={[
+            s.accountAvatar,
+            {
+              backgroundColor: isGuest ? colors.surface : `${colors.lamp}20`,
+              borderColor: isGuest ? colors.line : colors.lamp,
+            },
+          ]}
+        >
+          <Ionicons
+            name={isGuest ? 'person-outline' : 'shield-checkmark'}
+            size={22}
+            color={isGuest ? colors.dim : colors.lamp}
+          />
+        </View>
+        <View style={s.accountInfo}>
+          <View style={s.accountBadgeRow}>
+            <Text style={[s.accountName, { color: colors.text }]}>
+              {user?.displayName || 'Guest Household'}
+            </Text>
+            <View
+              style={[
+                s.roleTag,
+                {
+                  backgroundColor: isGuest ? `${colors.dim}18` : `${colors.ok}18`,
+                  borderColor: isGuest ? colors.dimmer : colors.ok,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  s.roleTagText,
+                  { color: isGuest ? colors.dim : colors.ok },
+                ]}
+              >
+                {isGuest ? 'OFFLINE GUEST' : 'OWNER • SECURE'}
+              </Text>
+            </View>
+          </View>
+          <Text style={[s.accountSub, { color: colors.dim }]}>
+            {user?.householdName || 'Local Switch Box'} • {user?.email || 'No cloud sync'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[s.accountDivider, { backgroundColor: colors.line }]} />
+
+      <View style={s.accountActions}>
+        {isGuest ? (
+          <Press
+            style={[s.accountBtnPrimary, { backgroundColor: colors.lamp }]}
+            onPress={() => {
+              tap();
+              h.openAuthModal();
+            }}
+          >
+            <Ionicons name="lock-closed" size={14} color="#FFFFFF" />
+            <Text style={s.accountBtnPrimaryText}>Secure My Switch Box (Sign In)</Text>
+          </Press>
+        ) : (
+          <View style={s.accountBtnRow}>
+            <Press
+              style={[s.accountBtnSecondary, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              onPress={() => {
+                tap();
+                h.openAuthModal();
+              }}
+            >
+              <Ionicons name="swap-horizontal" size={14} color={colors.text} />
+              <Text style={[s.accountBtnSecondaryText, { color: colors.text }]}>Switch Account</Text>
+            </Press>
+
+            <Press
+              style={[s.accountBtnSecondary, { backgroundColor: `${colors.bad}14`, borderColor: `${colors.bad}30` }]}
+              onPress={() => {
+                tap();
+                h.signOutUser();
+              }}
+            >
+              <Ionicons name="log-out-outline" size={14} color={colors.bad} />
+              <Text style={[s.accountBtnSecondaryText, { color: colors.bad }]}>Sign Out</Text>
+            </Press>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export default function Settings() {
   const h = useHome();
   const colors = h.colors;
@@ -256,6 +362,11 @@ export default function Settings() {
       keyboardShouldPersistTaps="handled"
     >
       <Header title="Settings" sub="Personalize your home control" colors={colors} />
+
+      {/* Household & Account Card */}
+      <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+        <AccountCard />
+      </View>
 
       {/* Appearance Segment Control */}
       <Section
@@ -666,5 +777,95 @@ const s = StyleSheet.create({
   hourText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  accountCard: {
+    borderRadius: 22,
+    borderWidth: 1.5,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  accountTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  accountAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  accountBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  accountName: {
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  roleTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  roleTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  accountSub: {
+    fontSize: 12,
+  },
+  accountDivider: {
+    height: 1,
+    marginVertical: 14,
+  },
+  accountActions: {
+    width: '100%',
+  },
+  accountBtnPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: 22,
+    gap: 8,
+  },
+  accountBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  accountBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  accountBtnSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  accountBtnSecondaryText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
