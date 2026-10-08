@@ -354,6 +354,7 @@ function ScheduleCard({ item, index }: { item: ScheduleItem; index: number }) {
 export default function Timers() {
   const h = useHome();
   const colors = h.colors;
+  const isDark = h.isDark;
   const [tab, setTab] = useState<'countdown' | 'routines'>('countdown');
   const [addScheduleOpen, setAddScheduleOpen] = useState(false);
 
@@ -361,33 +362,40 @@ export default function Timers() {
     <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
       <Header
         title="Timers"
-        sub={tab === 'countdown' ? 'Auto-off countdowns for your switches' : 'Daily automatic routines & schedules'}
+        sub="Auto-off countdowns & daily schedules"
         colors={colors}
       />
 
-      {/* Segment Selector: Timers vs Daily Routines */}
-      <View style={s.segmentRow}>
+      {/* Segment Selector: Timers vs Schedules */}
+      <View style={[s.segmentContainer, { backgroundColor: colors.surface, borderColor: colors.line }]}>
         <Press
           onPress={() => {
             tap();
             setTab('countdown');
           }}
           style={[
-            s.segmentTab,
+            s.segmentBtn,
             tab === 'countdown' && {
               backgroundColor: colors.card,
-              borderColor: colors.lamp,
-              shadowColor: colors.lamp,
-              shadowOpacity: 0.12,
+              shadowColor: '#000',
+              shadowOpacity: isDark ? 0.22 : 0.08,
+              shadowOffset: { width: 0, height: 2 },
               shadowRadius: 6,
               elevation: 2,
             },
-            { borderColor: colors.line },
           ]}
         >
           <Ionicons name="timer-outline" size={16} color={tab === 'countdown' ? colors.lamp : colors.dim} />
-          <Text style={[s.segmentTabText, { color: tab === 'countdown' ? colors.text : colors.dim }]}>
-            Countdown Timers
+          <Text
+            style={[
+              s.segmentBtnText,
+              {
+                color: tab === 'countdown' ? colors.text : colors.dim,
+                fontWeight: tab === 'countdown' ? '500' : '300',
+              },
+            ]}
+          >
+            Timers
           </Text>
         </Press>
 
@@ -397,21 +405,28 @@ export default function Timers() {
             setTab('routines');
           }}
           style={[
-            s.segmentTab,
+            s.segmentBtn,
             tab === 'routines' && {
               backgroundColor: colors.card,
-              borderColor: colors.lamp,
-              shadowColor: colors.lamp,
-              shadowOpacity: 0.12,
+              shadowColor: '#000',
+              shadowOpacity: isDark ? 0.22 : 0.08,
+              shadowOffset: { width: 0, height: 2 },
               shadowRadius: 6,
               elevation: 2,
             },
-            { borderColor: colors.line },
           ]}
         >
           <Ionicons name="calendar-outline" size={16} color={tab === 'routines' ? colors.lamp : colors.dim} />
-          <Text style={[s.segmentTabText, { color: tab === 'routines' ? colors.text : colors.dim }]}>
-            Daily Routines
+          <Text
+            style={[
+              s.segmentBtnText,
+              {
+                color: tab === 'routines' ? colors.text : colors.dim,
+                fontWeight: tab === 'routines' ? '500' : '300',
+              },
+            ]}
+          >
+            Schedules
           </Text>
         </Press>
       </View>
@@ -664,25 +679,25 @@ const s = StyleSheet.create({
   startText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 
   /* Segment Selector */
-  segmentRow: {
+  segmentContainer: {
     flexDirection: 'row',
     marginHorizontal: 20,
     marginBottom: 16,
-    gap: 8,
+    padding: 4,
+    borderRadius: 18,
+    borderWidth: 1,
   },
-  segmentTab: {
+  segmentBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
+    paddingVertical: 9,
+    borderRadius: 14,
   },
-  segmentTabText: {
-    fontSize: 13,
-    fontWeight: '300',
+  segmentBtnText: {
+    fontSize: 14,
     letterSpacing: -0.2,
   },
 

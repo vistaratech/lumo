@@ -365,14 +365,15 @@ export default function Home() {
     <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
       {/* Top Header Bar */}
       <Animated.View entering={FadeInDown.duration(450)} style={s.top}>
-        <View style={{ flex: 1, paddingRight: 8 }}>
+        <View style={s.topHeaderRow}>
           <Text style={[s.headerTitle, { color: colors.text }]}>Home</Text>
           <View style={s.greetingRow}>
             <Ionicons name={greetingIcon as any} size={15} color={greetingColor} />
             <Text style={[s.greeting, { color: colors.dim }]}>{greeting}</Text>
           </View>
         </View>
-        <View style={s.topActions}>
+
+        <View style={s.topActionsRow}>
           <Press
             onPress={() => {
               tap();
@@ -386,7 +387,7 @@ export default function Home() {
               },
             ]}
           >
-            <Ionicons name="mic" size={14} color="#38BDF8" />
+            <Ionicons name="mic" size={13} color="#38BDF8" />
             <Text style={s.voiceBtnText}>Voice</Text>
           </Press>
 
@@ -400,6 +401,7 @@ export default function Home() {
               setWifiModalOpen(true);
             }}
           />
+
           <ConnectButton
             ready={h.ready}
             bleActive={h.bleActive}
@@ -592,18 +594,17 @@ export default function Home() {
 
 const s = StyleSheet.create({
   top: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: 18,
-    paddingBottom: 12,
+    paddingBottom: 14,
   },
-  topActions: {
+  topHeaderRow: {
+    marginBottom: 14,
+  },
+  topActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingTop: 6,
   },
   voiceBtn: {
     flexDirection: 'row',
