@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vistaratech.lumo",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Lumo requires Bluetooth to discover and control your smart home ESP32 relays.",
         "NSBluetoothPeripheralUsageDescription": "Lumo requires Bluetooth to discover and control your smart home ESP32 relays."

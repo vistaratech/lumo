@@ -1,4 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile,
+  onAuthStateChanged,
+} from 'firebase/auth';
+import { auth } from './firebaseConfig';
 
 export interface LumoUser {
   uid: string;
@@ -20,6 +28,7 @@ type AuthListener = (user: LumoUser | null) => void;
 const listeners: Set<AuthListener> = new Set();
 
 let currentUser: LumoUser | null = null;
+let isFirebaseListenerInitialized = false;
 
 export const addAuthListener = (listener: AuthListener) => {
   listeners.add(listener);
@@ -44,19 +53,62 @@ const notifyListeners = (user: LumoUser | null) => {
  * Initialize and restore persisted session
  */
 export async function initAuth(): Promise<LumoUser | null> {
+  // First load locally cached session immediately for zero wait time
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY_USER);
     if (raw) {
       const parsed: LumoUser = JSON.parse(raw);
       currentUser = parsed;
       notifyListeners(currentUser);
-      return parsed;
     }
   } catch (err) {
-    console.warn('[Auth] Failed to load user session:', err);
+    console.warn('[Auth] Failed to load local user session:', err);
   }
-  notifyListeners(null);
-  return null;
+
+  // Subscribe to Firebase Auth state
+  if (!isFirebaseListenerInitialized && auth) {
+    isFirebaseListenerInitialized = true;
+    try {
+      onAuthStateChanged(auth, async (fbUser) => {
+        if (fbUser) {
+          // If we already have household metadata stored locally for this UID
+          let householdName = 'My Smart Home';
+          try {
+            const raw = await AsyncStorage.getItem(STORAGE_KEY_USER);
+            if (raw) {
+              const parsed: LumoUser = JSON.parse(raw);
+              if (parsed.uid === fbUser.uid && parsed.householdName) {
+                householdName = parsed.householdName;
+              }
+            }
+          } catch {}
+
+          const syncedUser: LumoUser = {
+            uid: fbUser.uid,
+            email: fbUser.email || '',
+            displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Home Owner',
+            householdName,
+            role: 'owner',
+            linkedDevices: ['ESP32_MINI_01'],
+            createdAt: fbUser.metadata.creationTime ? new Date(fbUser.metadata.creationTime).getTime() : Date.now(),
+            isGuest: false,
+          };
+          currentUser = syncedUser;
+          await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(syncedUser));
+          notifyListeners(syncedUser);
+        } else if (currentUser && !currentUser.isGuest) {
+          // Firebase signed out and not a local guest
+          currentUser = null;
+          await AsyncStorage.removeItem(STORAGE_KEY_USER);
+          notifyListeners(null);
+        }
+      });
+    } catch (e) {
+      console.warn('[Auth] Firebase onAuthStateChanged error:', e);
+    }
+  }
+
+  return currentUser;
 }
 
 export function getCurrentUser(): LumoUser | null {
@@ -76,8 +128,7 @@ export function getUserMqttPrefix(user?: LumoUser | null): string {
 }
 
 /**
- * Mock/Local secure customer database stored encrypted in AsyncStorage
- * Can seamlessly hook into Firebase Auth SDK when online
+ * Mock/Local secure customer database fallback
  */
 async function getStoredUsers(): Promise<Record<string, { user: LumoUser; passHash: string }>> {
   try {
@@ -95,7 +146,7 @@ async function saveStoredUsers(db: Record<string, { user: LumoUser; passHash: st
 }
 
 /**
- * Sign up a new customer account
+ * Sign up a new customer account using Firebase Auth
  */
 export async function signUpWithEmail(
   email: string,
@@ -111,6 +162,46 @@ export async function signUpWithEmail(
     return { success: false, error: 'Password must be at least 6 characters' };
   }
 
+  // 1. Try Firebase Auth
+  try {
+    if (auth) {
+      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+      const fbUser = credential.user;
+
+      if (displayName.trim()) {
+        await updateProfile(fbUser, { displayName: displayName.trim() }).catch(() => {});
+      }
+
+      const newUser: LumoUser = {
+        uid: fbUser.uid,
+        email: cleanEmail,
+        displayName: displayName.trim() || cleanEmail.split('@')[0],
+        householdName: householdName.trim() || 'My Smart Home',
+        role: 'owner',
+        linkedDevices: ['ESP32_MINI_01'],
+        createdAt: Date.now(),
+        isGuest: false,
+      };
+
+      await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(newUser));
+      notifyListeners(newUser);
+      return { success: true, user: newUser };
+    }
+  } catch (fbErr: any) {
+    console.warn('[Auth] Firebase sign-up warning:', fbErr?.code || fbErr?.message);
+    if (fbErr?.code === 'auth/email-already-in-use') {
+      return { success: false, error: 'An account with this email already exists' };
+    }
+    if (fbErr?.code === 'auth/weak-password') {
+      return { success: false, error: 'Password is too weak' };
+    }
+    // If network error, allow local fallback
+    if (fbErr?.code !== 'auth/network-request-failed') {
+      return { success: false, error: fbErr?.message || 'Firebase sign-up failed' };
+    }
+  }
+
+  // 2. Offline / Local fallback
   const db = await getStoredUsers();
   if (db[cleanEmail]) {
     return { success: false, error: 'An account with this email already exists' };
@@ -130,7 +221,7 @@ export async function signUpWithEmail(
 
   db[cleanEmail] = {
     user: newUser,
-    passHash: pass, // In prod Firebase handles hashing
+    passHash: pass,
   };
   await saveStoredUsers(db);
 
@@ -140,7 +231,7 @@ export async function signUpWithEmail(
 }
 
 /**
- * Sign in existing customer
+ * Sign in existing customer using Firebase Auth
  */
 export async function signInWithEmail(
   email: string,
@@ -151,6 +242,49 @@ export async function signInWithEmail(
     return { success: false, error: 'Please enter email and password' };
   }
 
+  // 1. Try Firebase Auth
+  try {
+    if (auth) {
+      const credential = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+      const fbUser = credential.user;
+
+      let householdName = 'My Smart Home';
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY_USER);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.uid === fbUser.uid && parsed.householdName) {
+            householdName = parsed.householdName;
+          }
+        }
+      } catch {}
+
+      const user: LumoUser = {
+        uid: fbUser.uid,
+        email: cleanEmail,
+        displayName: fbUser.displayName || cleanEmail.split('@')[0],
+        householdName,
+        role: 'owner',
+        linkedDevices: ['ESP32_MINI_01'],
+        createdAt: fbUser.metadata.creationTime ? new Date(fbUser.metadata.creationTime).getTime() : Date.now(),
+        isGuest: false,
+      };
+
+      await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+      notifyListeners(user);
+      return { success: true, user };
+    }
+  } catch (fbErr: any) {
+    console.warn('[Auth] Firebase sign-in warning:', fbErr?.code || fbErr?.message);
+    if (fbErr?.code === 'auth/invalid-credential' || fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/user-not-found') {
+      return { success: false, error: 'Invalid email or password' };
+    }
+    if (fbErr?.code !== 'auth/network-request-failed') {
+      return { success: false, error: fbErr?.message || 'Sign in failed' };
+    }
+  }
+
+  // 2. Offline / Local fallback
   const db = await getStoredUsers();
   const entry = db[cleanEmail];
   if (!entry || entry.passHash !== pass) {
@@ -188,6 +322,9 @@ export async function continueAsGuest(
  */
 export async function signOut(): Promise<void> {
   try {
+    if (auth) {
+      await firebaseSignOut(auth).catch(() => {});
+    }
     await AsyncStorage.removeItem(STORAGE_KEY_USER);
     await AsyncStorage.removeItem(STORAGE_KEY_TOKEN);
   } catch {}
@@ -207,6 +344,11 @@ export async function updateHousehold(
     displayName: displayName.trim() || currentUser.displayName,
     householdName: householdName.trim() || currentUser.householdName,
   };
+
+  if (auth && auth.currentUser && displayName.trim()) {
+    await updateProfile(auth.currentUser, { displayName: displayName.trim() }).catch(() => {});
+  }
+
   await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updated));
 
   if (!currentUser.isGuest) {
