@@ -19,6 +19,7 @@ import BluetoothModal from './BluetoothModal';
 import WifiModal from './WifiModal';
 import VoiceModal from './VoiceModal';
 import AddSceneModal from './AddSceneModal';
+import EditSwitchModal from './EditSwitchModal';
 
 const sinceLabel = (t: number | null, now: number) => {
   if (!t) return 'Active';
@@ -28,7 +29,15 @@ const sinceLabel = (t: number | null, now: number) => {
   return `On for ${Math.floor(m / 60)}h ${m % 60}m`;
 };
 
-function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: number }) {
+function Tile({
+  channel,
+  index,
+  onEdit,
+}: {
+  channel: (typeof CHANNELS)[number];
+  index: number;
+  onEdit?: (id: number) => void;
+}) {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
@@ -101,6 +110,11 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
           tap();
           h.toggle(id);
         }}
+        onLongPress={() => {
+          tap();
+          onEdit?.(id);
+        }}
+        delayLongPress={420}
       >
         <Animated.View style={[s.tile, card]}>
           {/* Ambient Glow */}
@@ -151,10 +165,25 @@ function Tile({ channel, index }: { channel: (typeof CHANNELS)[number]; index: n
 
           {/* Bottom Row: Room & Channel Nickname */}
           <View>
-            <View style={s.roomRow}>
+            <Pressable
+              onPress={() => {
+                tap();
+                onEdit?.(id);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={s.roomRow}
+            >
               <View style={[s.roomDot, { backgroundColor: on ? accentColor : colors.dim }]} />
-              <Text style={[s.roomText, { color: on ? accentColor : colors.dim }]}>{channel.room}</Text>
-            </View>
+              <Text style={[s.roomText, { color: on ? accentColor : colors.dim }]}>
+                {h.rooms[id] || channel.room}
+              </Text>
+              <Ionicons
+                name="pencil-sharp"
+                size={9}
+                color={on ? accentColor : colors.dimmer}
+                style={{ opacity: 0.75, marginLeft: 2 }}
+              />
+            </Pressable>
             <Text style={[s.tileName, { color: colors.text }]}>{h.names[id]}</Text>
             <View style={s.statusRow}>
               <Ionicons
@@ -360,6 +389,7 @@ export default function Home() {
   const [wifiModalOpen, setWifiModalOpen] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [addSceneOpen, setAddSceneOpen] = useState(false);
+  const [editSwitchChannelId, setEditSwitchChannelId] = useState<number | null>(null);
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
@@ -600,7 +630,12 @@ export default function Home() {
       {/* Colorful Switch Tiles */}
       <View style={s.tiles}>
         {CHANNELS.map((ch, i) => (
-          <Tile key={ch.id} channel={ch} index={i} />
+          <Tile
+            key={ch.id}
+            channel={ch}
+            index={i}
+            onEdit={(channelId) => setEditSwitchChannelId(channelId)}
+          />
         ))}
       </View>
 
@@ -628,6 +663,13 @@ export default function Home() {
         visible={wifiModalOpen}
         onClose={() => setWifiModalOpen(false)}
         onOpenBluetooth={() => setBleModalOpen(true)}
+      />
+
+      {/* Quick Edit Switch & Room Modal */}
+      <EditSwitchModal
+        visible={editSwitchChannelId !== null}
+        channelId={editSwitchChannelId}
+        onClose={() => setEditSwitchChannelId(null)}
       />
     </ScrollView>
   );

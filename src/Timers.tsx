@@ -156,7 +156,7 @@ function TimerCard({ channel, index }: { channel: (typeof CHANNELS)[number]; ind
       {/* Top Header: Room & Name on Left, Single Clean Pill on Right */}
       <View style={s.cardHead}>
         <View style={s.titleWrap}>
-          <Text style={[s.roomLabel, { color: colors.dim }]}>{channel.room.toUpperCase()}</Text>
+          <Text style={[s.roomLabel, { color: colors.dim }]}>{(h.rooms[id] || channel.room).toUpperCase()}</Text>
           <Text style={[s.switchName, { color: colors.text }]}>{h.names[id]}</Text>
         </View>
 

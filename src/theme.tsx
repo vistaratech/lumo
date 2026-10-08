@@ -223,11 +223,15 @@ export function Ring({
 /* ---------- smooth-press wrapper ---------- */
 export function Press({
   onPress,
+  onLongPress,
+  delayLongPress,
   disabled,
   style,
   children,
 }: {
   onPress?: () => void;
+  onLongPress?: () => void;
+  delayLongPress?: number;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
@@ -249,6 +253,8 @@ export function Press({
     <Pressable
       disabled={disabled}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={delayLongPress}
       style={pressableStyle}
       onPressIn={() => {
         sc.value = withTiming(0.97, { duration: 90, easing: Easing.out(Easing.quad) });

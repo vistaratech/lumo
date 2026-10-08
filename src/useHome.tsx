@@ -64,6 +64,7 @@ type Ctx = {
   timerEnd: Rec<number | null>;
   timerTotal: Rec<number>;
   names: Rec<string>;
+  rooms: Rec<string>;
   haptics: boolean;
   themeMode: ThemeMode;
   isDark: boolean;
@@ -75,6 +76,7 @@ type Ctx = {
   scannedWifiList: ScannedWifi[];
   isScanningWifi: boolean;
   setName: (id: number, name: string) => void;
+  setRoom: (id: number, room: string) => void;
   setHaptics: (v: boolean) => void;
   setThemeMode: (mode: ThemeMode) => void;
   toggle: (id: number) => void;
@@ -208,6 +210,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   const [timerEnd, setTimerEnd] = useState<Rec<number | null>>({});
   const [timerTotal, setTimerTotal] = useState<Rec<number>>({});
   const [names, setNames] = useState<Rec<string>>(Object.fromEntries(CHANNELS.map((c) => [c.id, c.name])));
+  const [rooms, setRooms] = useState<Rec<string>>(Object.fromEntries(CHANNELS.map((c) => [c.id, c.room])));
   const [haptics, setHapticsState] = useState(true);
   const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
   const [now, setNow] = useState(Date.now());
@@ -597,6 +600,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         try {
           const p = JSON.parse(v);
           if (p.names) setNames((n) => ({ ...n, ...p.names }));
+          if (p.rooms) setRooms((r) => ({ ...r, ...p.rooms }));
           if (typeof p.haptics === 'boolean') {
             feel.haptics = p.haptics;
             setHapticsState(p.haptics);
@@ -609,24 +613,30 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
-  const save = (n: Rec<string>, hp: boolean, tm: ThemeMode) =>
-    AsyncStorage.setItem('lumo.prefs', JSON.stringify({ names: n, haptics: hp, themeMode: tm })).catch(() => {});
+  const save = (n: Rec<string>, rm: Rec<string>, hp: boolean, tm: ThemeMode) =>
+    AsyncStorage.setItem('lumo.prefs', JSON.stringify({ names: n, rooms: rm, haptics: hp, themeMode: tm })).catch(() => {});
 
   const setName = (id: number, name: string) => {
     const n = { ...names, [id]: name };
     setNames(n);
-    save(n, haptics, themeMode);
+    save(n, rooms, haptics, themeMode);
+  };
+
+  const setRoom = (id: number, room: string) => {
+    const r = { ...rooms, [id]: room };
+    setRooms(r);
+    save(names, r, haptics, themeMode);
   };
 
   const setHaptics = (v: boolean) => {
     feel.haptics = v;
     setHapticsState(v);
-    save(names, v, themeMode);
+    save(names, rooms, v, themeMode);
   };
 
   const setThemeMode = (mode: ThemeMode) => {
     setThemeModeState(mode);
-    save(names, haptics, mode);
+    save(names, rooms, haptics, mode);
   };
 
   const setPend = (id: number, v: boolean) => {
@@ -1059,9 +1069,11 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
 
     const ch1Name = (names[1] || 'veli light').toLowerCase();
     const ch2Name = (names[2] || 'bedroom').toLowerCase();
+    const ch1Room = (rooms[1] || '').toLowerCase();
+    const ch2Room = (rooms[2] || '').toLowerCase();
 
-    const mentions1 = query.includes('1') || query.includes('veli') || query.includes(ch1Name) || query.includes('porch');
-    const mentions2 = query.includes('2') || query.includes('bedroom') || query.includes('living') || query.includes(ch2Name);
+    const mentions1 = query.includes('1') || query.includes('veli') || query.includes(ch1Name) || (ch1Room ? query.includes(ch1Room) : false) || query.includes('porch');
+    const mentions2 = query.includes('2') || query.includes('bedroom') || (ch2Room ? query.includes(ch2Room) : false) || query.includes('living') || query.includes(ch2Name);
 
     const wantsOff = query.includes('off') || query.includes('aathu') || query.includes('aathi') || query.includes('anaithu');
 
@@ -1110,6 +1122,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     timerEnd,
     timerTotal,
     names,
+    rooms,
     haptics,
     themeMode,
     isDark,
@@ -1121,6 +1134,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     scannedWifiList,
     isScanningWifi,
     setName,
+    setRoom,
     setHaptics,
     setThemeMode,
     toggle: (id) => {

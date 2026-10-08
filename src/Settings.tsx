@@ -139,23 +139,31 @@ function ThemeSegmentControl({
   );
 }
 
-function NameField({ channel }: { channel: (typeof CHANNELS)[number] }) {
+const ROOM_PRESETS = [
+  'Living Room',
+  'Bedroom',
+  'Kitchen',
+  'Hall',
+  'Balcony',
+  'Outdoor',
+  'Dining',
+  'Office',
+  'Bathroom',
+];
+
+function SwitchSetupCard({ channel }: { channel: (typeof CHANNELS)[number] }) {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
   const id = channel.id;
-  const focus = useSharedValue(0);
 
   const accentColor = isDark ? channel.color : channel.colorLight;
-
-  const box = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(focus.value, [0, 1], [colors.line, accentColor]),
-  }));
+  const currentRoom = h.rooms[id] || channel.room;
 
   return (
-    <Animated.View
+    <View
       style={[
-        s.field,
+        s.switchCard,
         {
           backgroundColor: colors.card,
           borderColor: colors.line,
@@ -165,24 +173,103 @@ function NameField({ channel }: { channel: (typeof CHANNELS)[number] }) {
           shadowRadius: 6,
           elevation: 2,
         },
-        box,
       ]}
     >
-      <View style={[s.fieldIconWrap, { backgroundColor: `${accentColor}18` }]}>
-        <Ionicons name={channel.icon as any} size={18} color={accentColor} />
+      {/* Card Header */}
+      <View style={s.switchCardHeader}>
+        <View style={s.switchCardHeaderLeft}>
+          <View style={[s.fieldIconWrap, { backgroundColor: `${accentColor}18` }]}>
+            <Ionicons name={channel.icon as any} size={18} color={accentColor} />
+          </View>
+          <View>
+            <Text style={[s.switchCardTitle, { color: colors.text }]}>Switch {id}</Text>
+            <Text style={[s.switchCardSub, { color: colors.dim }]}>Relay Channel {id}</Text>
+          </View>
+        </View>
+
+        <View style={[s.roomBadge, { backgroundColor: `${accentColor}16`, borderColor: `${accentColor}40` }]}>
+          <Ionicons name="home" size={11} color={accentColor} />
+          <Text style={[s.roomBadgeText, { color: accentColor }]}>{currentRoom}</Text>
+        </View>
       </View>
-      <TextInput
-        value={h.names[id]}
-        onChangeText={(t) => h.setName(id, t)}
-        onFocus={() => (focus.value = withTiming(1, { duration: 200 }))}
-        onBlur={() => (focus.value = withTiming(0, { duration: 200 }))}
-        maxLength={20}
-        selectionColor={accentColor}
-        placeholder={`Switch ${id}`}
-        placeholderTextColor={colors.dim}
-        style={[s.input, { color: colors.text }]}
-      />
-    </Animated.View>
+
+      {/* Switch Name Field */}
+      <View style={s.inputBlock}>
+        <Text style={[s.inputLabel, { color: colors.dim }]}>SWITCH NAME</Text>
+        <View style={[s.inputFieldRow, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <Ionicons name="pricetag-outline" size={16} color={accentColor} />
+          <TextInput
+            value={h.names[id]}
+            onChangeText={(t) => h.setName(id, t)}
+            maxLength={20}
+            selectionColor={accentColor}
+            placeholder={`Switch ${id}`}
+            placeholderTextColor={colors.dimmer}
+            style={[s.cleanInput, { color: colors.text }]}
+          />
+        </View>
+      </View>
+
+      {/* Assigned Room Field */}
+      <View style={s.inputBlock}>
+        <Text style={[s.inputLabel, { color: colors.dim }]}>ASSIGNED ROOM</Text>
+        <View style={[s.inputFieldRow, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <Ionicons name="business-outline" size={16} color={accentColor} />
+          <TextInput
+            value={h.rooms[id] || channel.room}
+            onChangeText={(t) => h.setRoom(id, t)}
+            maxLength={20}
+            selectionColor={accentColor}
+            placeholder="e.g. Living Room, Bedroom"
+            placeholderTextColor={colors.dimmer}
+            style={[s.cleanInput, { color: colors.text }]}
+          />
+        </View>
+
+        {/* Quick Room Preset Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.chipsRow}
+          style={s.chipsScroll}
+        >
+          {ROOM_PRESETS.map((preset) => {
+            const isSelected = currentRoom.trim().toLowerCase() === preset.toLowerCase();
+            return (
+              <Press
+                key={preset}
+                onPress={() => {
+                  tap();
+                  h.setRoom(id, preset);
+                }}
+                style={[
+                  s.roomChip,
+                  {
+                    backgroundColor: isSelected ? `${accentColor}25` : colors.card,
+                    borderColor: isSelected ? accentColor : colors.line,
+                  },
+                ]}
+              >
+                {isSelected && (
+                  <Ionicons name="checkmark-sharp" size={11} color={accentColor} style={{ marginRight: 3 }} />
+                )}
+                <Text
+                  style={[
+                    s.roomChipText,
+                    {
+                      color: isSelected ? accentColor : colors.text,
+                      fontWeight: isSelected ? '700' : '500',
+                    },
+                  ]}
+                >
+                  {preset}
+                </Text>
+              </Press>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </View>
   );
 }
 
@@ -384,17 +471,17 @@ export default function Settings() {
         />
       </Section>
 
-      {/* Switch Names Section */}
+      {/* Switch & Room Setup Section */}
       <Section
         i={1}
-        title="SWITCH NAMES"
-        icon="pricetags"
+        title="SWITCH & ROOM SETUP"
+        icon="layers-outline"
         iconColor="#FF9500"
         dimColor={colors.dim}
         colors={colors}
       >
         {CHANNELS.map((ch) => (
-          <NameField key={ch.id} channel={ch} />
+          <SwitchSetupCard key={ch.id} channel={ch} />
         ))}
       </Section>
 
@@ -892,5 +979,88 @@ const s = StyleSheet.create({
   accountBtnSecondaryText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  switchCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    gap: 14,
+  },
+  switchCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 2,
+  },
+  switchCardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  switchCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  switchCardSub: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  roomBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  roomBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  inputBlock: {
+    gap: 6,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginLeft: 2,
+  },
+  inputFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    height: 46,
+  },
+  cleanInput: {
+    flex: 1,
+    fontSize: 14,
+    height: '100%',
+  },
+  chipsScroll: {
+    marginTop: 4,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  roomChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  roomChipText: {
+    fontSize: 11,
   },
 });
