@@ -16,6 +16,8 @@
       }
     },
     "android": {
+      "package": "com.vistaratech.lumo",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B101B"

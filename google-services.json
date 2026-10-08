@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1087681119264",
+    "project_id": "lumo-ind",
+    "storage_bucket": "lumo-ind.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1087681119264:android:1ce3f897b6911a3470e845",
+        "android_client_info": {
+          "package_name": "com.vistaratech.lumo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfTQ9Xuk92M-JDSfBOpuirnKb94COaiDs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
