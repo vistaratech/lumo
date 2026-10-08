@@ -234,10 +234,22 @@ export function Press({
 }) {
   const sc = useSharedValue(1);
   const a = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
+
+  const flat = StyleSheet.flatten(style);
+  const isFlex = flat && (flat.flex !== undefined || flat.flexGrow !== undefined);
+  const pressableStyle: ViewStyle | undefined = isFlex
+    ? {
+        flex: flat.flex,
+        flexGrow: flat.flexGrow,
+        flexShrink: flat.flexShrink,
+      }
+    : undefined;
+
   return (
     <Pressable
       disabled={disabled}
       onPress={onPress}
+      style={pressableStyle}
       onPressIn={() => {
         sc.value = withTiming(0.97, { duration: 90, easing: Easing.out(Easing.quad) });
       }}
@@ -245,7 +257,9 @@ export function Press({
         sc.value = withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) });
       }}
     >
-      <Animated.View style={[style, a, disabled && { opacity: 0.4 }]}>{children}</Animated.View>
+      <Animated.View style={[style, a, isFlex && { width: '100%' }, disabled && { opacity: 0.4 }]}>
+        {children}
+      </Animated.View>
     </Pressable>
   );
 }

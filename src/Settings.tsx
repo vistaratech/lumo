@@ -480,8 +480,20 @@ export default function Settings() {
         </Press>
 
         {h.nightGuard.enabled && (
-          <View style={[s.nightGuardPillsRow, { backgroundColor: colors.card, borderColor: colors.line }]}>
-            <Text style={[s.nightGuardLabel, { color: colors.dim }]}>MAX RUNTIME LIMIT:</Text>
+          <View
+            style={[
+              s.nightGuardPillsRow,
+              { backgroundColor: colors.card, borderColor: colors.line },
+            ]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <Text style={[s.nightGuardLabel, { color: colors.dim, marginBottom: 0 }]}>
+                MAX RUNTIME LIMIT
+              </Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#38BDF8' }}>
+                {h.nightGuard.maxHours} Hour{h.nightGuard.maxHours > 1 ? 's' : ''} Limit
+              </Text>
+            </View>
             <View style={s.hoursRow}>
               {[1, 2, 4, 8].map((hrs) => {
                 const active = h.nightGuard.maxHours === hrs;
@@ -495,12 +507,20 @@ export default function Settings() {
                     style={[
                       s.hourPill,
                       {
-                        backgroundColor: active ? 'rgba(56, 189, 248, 0.2)' : colors.surface,
+                        backgroundColor: active ? 'rgba(56, 189, 248, 0.18)' : colors.surface,
                         borderColor: active ? '#38BDF8' : colors.line,
                       },
                     ]}
                   >
-                    <Text style={[s.hourText, { color: active ? '#38BDF8' : colors.dim }]}>
+                    <Text
+                      style={[
+                        s.hourText,
+                        {
+                          color: active ? '#38BDF8' : colors.dim,
+                          fontWeight: active ? '700' : '500',
+                        },
+                      ]}
+                    >
                       {hrs} hr{hrs > 1 ? 's' : ''}
                     </Text>
                   </Press>
@@ -751,32 +771,36 @@ const s = StyleSheet.create({
   rowLabel: { fontSize: 15, fontWeight: '600' },
   rowValue: { fontSize: 14, maxWidth: '50%' },
   nightGuardPillsRow: {
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1.5,
-    padding: 14,
+    padding: 16,
     marginTop: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
   },
   nightGuardLabel: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     letterSpacing: 0.8,
-    marginBottom: 8,
   },
   hoursRow: {
     flexDirection: 'row',
     gap: 8,
+    width: '100%',
   },
   hourPill: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
   },
   hourText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
   },
   accountCard: {
     borderRadius: 22,
@@ -853,19 +877,20 @@ const s = StyleSheet.create({
   accountBtnRow: {
     flexDirection: 'row',
     gap: 10,
+    width: '100%',
   },
   accountBtnSecondary: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1.5,
     gap: 6,
   },
   accountBtnSecondaryText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
 });
