@@ -618,9 +618,189 @@ export default function Settings() {
         )}
       </Section>
 
-      {/* System Status Section with Interactive Bluetooth Discovery */}
+      {/* Smart Notifications Section */}
       <Section
         i={4}
+        title="SMART NOTIFICATIONS"
+        icon="notifications"
+        iconColor="#F59E0B"
+        dimColor={colors.dim}
+        colors={colors}
+      >
+        {/* Master Toggle */}
+        <Press
+          style={[
+            s.row,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.line,
+              shadowColor: '#000',
+              shadowOpacity: 0.05,
+              shadowOffset: { width: 0, height: 2 },
+              shadowRadius: 6,
+              elevation: 2,
+            },
+          ]}
+          onPress={() => {
+            tap();
+            h.updateNotificationPrefs({ enabled: !h.notificationPrefs.enabled });
+          }}
+        >
+          <View style={s.rowLeft}>
+            <View style={[s.rowIconBox, { backgroundColor: '#F59E0B18' }]}>
+              <Ionicons name="notifications" size={16} color="#F59E0B" />
+            </View>
+            <View>
+              <Text style={[s.rowLabel, { color: colors.text }]}>Push & Smart Alerts</Text>
+              <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
+                App reminders & status banners on phone
+              </Text>
+            </View>
+          </View>
+          <Toggle value={h.notificationPrefs.enabled} colors={colors} activeColor="#F59E0B" />
+        </Press>
+
+        {h.notificationPrefs.enabled && (
+          <>
+            {/* Night Check (10:00 PM) */}
+            <Press
+              style={[
+                s.row,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.line,
+                },
+              ]}
+              onPress={() => {
+                tap();
+                h.updateNotificationPrefs({ nightReminder: !h.notificationPrefs.nightReminder });
+              }}
+            >
+              <View style={s.rowLeft}>
+                <View style={[s.rowIconBox, { backgroundColor: '#8B5CF618' }]}>
+                  <Ionicons name="moon-outline" size={16} color="#8B5CF6" />
+                </View>
+                <View>
+                  <Text style={[s.rowLabel, { color: colors.text }]}>🌙 Night Sleep-Check (10:00 PM)</Text>
+                  <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
+                    Bedtime alert to turn off idle lights & save energy
+                  </Text>
+                </View>
+              </View>
+              <Toggle value={h.notificationPrefs.nightReminder} colors={colors} activeColor="#8B5CF6" />
+            </Press>
+
+            {/* Morning Routine (8:00 AM) */}
+            <Press
+              style={[
+                s.row,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.line,
+                },
+              ]}
+              onPress={() => {
+                tap();
+                h.updateNotificationPrefs({ morningDigest: !h.notificationPrefs.morningDigest });
+              }}
+            >
+              <View style={s.rowLeft}>
+                <View style={[s.rowIconBox, { backgroundColor: '#FF950018' }]}>
+                  <Ionicons name="sunny-outline" size={16} color="#FF9500" />
+                </View>
+                <View>
+                  <Text style={[s.rowLabel, { color: colors.text }]}>☀️ Morning Routine (8:00 AM)</Text>
+                  <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
+                    Daily morning reminder to start your day with Lumo
+                  </Text>
+                </View>
+              </View>
+              <Toggle value={h.notificationPrefs.morningDigest} colors={colors} activeColor="#FF9500" />
+            </Press>
+
+            {/* Timer Completion Alerts */}
+            <Press
+              style={[
+                s.row,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.line,
+                },
+              ]}
+              onPress={() => {
+                tap();
+                h.updateNotificationPrefs({ timerAlerts: !h.notificationPrefs.timerAlerts });
+              }}
+            >
+              <View style={s.rowLeft}>
+                <View style={[s.rowIconBox, { backgroundColor: '#06D6A018' }]}>
+                  <Ionicons name="timer-outline" size={16} color="#06D6A0" />
+                </View>
+                <View>
+                  <Text style={[s.rowLabel, { color: colors.text }]}>⏱️ Timer Completion Alerts</Text>
+                  <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
+                    Notifies when countdown timers turn off a switch
+                  </Text>
+                </View>
+              </View>
+              <Toggle value={h.notificationPrefs.timerAlerts} colors={colors} activeColor="#06D6A0" />
+            </Press>
+
+            {/* Device Token Status & Instant Test Button */}
+            <View
+              style={[
+                s.notifTestCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.line,
+                },
+              ]}
+            >
+              <View style={s.notifStatusHeader}>
+                <View style={s.notifStatusDotRow}>
+                  <View
+                    style={[
+                      s.notifStatusDot,
+                      {
+                        backgroundColor: h.notificationPrefs.permissionGranted
+                          ? '#06D6A0'
+                          : '#F59E0B',
+                      },
+                    ]}
+                  />
+                  <Text style={[s.notifStatusText, { color: colors.text }]}>
+                    {h.notificationPrefs.permissionGranted
+                      ? 'Mobile Alerts Active & Ready'
+                      : 'Notification Permission Pending'}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, color: colors.dim, marginLeft: 16 }}>
+                  {h.notificationPrefs.pushToken
+                    ? 'Registered for Remote & Local Push Alerts'
+                    : 'Local Scheduled Alerts Enabled'}
+                </Text>
+              </View>
+
+              <Press
+                onPress={() => h.sendTestNotification()}
+                style={[
+                  s.testNotifBtn,
+                  { backgroundColor: `${colors.lamp}20`, borderColor: colors.lamp },
+                ]}
+              >
+                <Ionicons name="paper-plane-outline" size={16} color={colors.lamp} />
+                <Text style={[s.testNotifBtnText, { color: colors.lamp }]}>
+                  Send Test Notification Now
+                </Text>
+              </Press>
+            </View>
+          </>
+        )}
+      </Section>
+
+      {/* System Status Section with Interactive Bluetooth Discovery */}
+      <Section
+        i={5}
         title="SYSTEM STATUS"
         icon="shield-checkmark"
         iconColor="#06D6A0"
@@ -1062,5 +1242,41 @@ const s = StyleSheet.create({
   },
   roomChipText: {
     fontSize: 11,
+  },
+  notifTestCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    gap: 14,
+  },
+  notifStatusHeader: {
+    gap: 4,
+  },
+  notifStatusDotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notifStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  notifStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  testNotifBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  testNotifBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

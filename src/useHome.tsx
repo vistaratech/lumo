@@ -3,9 +3,17 @@ import { AppState, useColorScheme } from 'react-native';
 import Paho from 'paho-mqtt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE, BROKER, CHANNELS } from './config';
-import { ThemeColors, ThemeMode, darkColors, feel, lightColors, notify } from './theme';
+import { ThemeColors, ThemeMode, darkColors, feel, lightColors, notify, tap } from './theme';
 import { addBleDataListener, addBleListener, autoReconnectBle, isBleConnected, sendBleCommand } from './bluetooth';
 import { LumoUser, addAuthListener, initAuth, signOut as authSignOut, getUserMqttPrefix } from './auth';
+import {
+  NotificationPrefs,
+  getNotificationPrefs,
+  registerForPushNotificationsAsync,
+  scheduleSmartReminders,
+  sendInstantNotification,
+  updateStoredPrefs,
+} from './notifications';
 
 type Rec<T> = Record<number, T>;
 
@@ -120,6 +128,11 @@ type Ctx = {
   openAuthModal: () => void;
   closeAuthModal: () => void;
   signOutUser: () => Promise<void>;
+
+  // Smart & Push Notifications
+  notificationPrefs: NotificationPrefs;
+  updateNotificationPrefs: (p: Partial<NotificationPrefs>) => Promise<void>;
+  sendTestNotification: () => Promise<void>;
 };
 
 const HomeCtx = createContext<Ctx>({} as Ctx);
@@ -239,11 +252,46 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<LumoUser | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
+  // Smart & Push Notifications State
+  const [notificationPrefs, setNotificationPrefsState] = useState<NotificationPrefs>({
+    enabled: true,
+    nightReminder: true,
+    morningDigest: true,
+    timerAlerts: true,
+    pushToken: null,
+    permissionGranted: false,
+  });
+
   useEffect(() => {
     initAuth().then((u) => setUser(u)).catch(() => {});
     const unsub = addAuthListener((u) => setUser(u));
+
+    // Initialize notification permissions & scheduled reminders
+    getNotificationPrefs().then((p) => {
+      setNotificationPrefsState(p);
+      registerForPushNotificationsAsync().then((token) => {
+        getNotificationPrefs().then(setNotificationPrefsState);
+        scheduleSmartReminders();
+      });
+    });
+
     return unsub;
   }, []);
+
+  const updateNotificationPrefs = async (partial: Partial<NotificationPrefs>) => {
+    const updated = await updateStoredPrefs(partial);
+    setNotificationPrefsState(updated);
+  };
+
+  const sendTestNotification = async () => {
+    tap();
+    await sendInstantNotification(
+      '💡 Lumo Smart Home',
+      'Your Lumo notifications are working perfectly! ✨',
+      { test: true }
+    );
+    notify('success');
+  };
 
   const openAuthModal = () => setAuthModalOpen(true);
   const closeAuthModal = () => setAuthModalOpen(false);
@@ -582,6 +630,16 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
             sendBleCommand(`TIMER:${id}:0`).catch(() => {});
             pub(`${BASE}/relay${id}/set`, 'OFF');
             notify('success');
+
+            // Send notification for timer finish
+            if (notificationPrefs.enabled && notificationPrefs.timerAlerts) {
+              const chName = names[id] || `Switch ${id}`;
+              sendInstantNotification(
+                '⏱️ Timer Finished',
+                `${chName} was turned OFF automatically.`,
+                { channelId: id, type: 'timer_finished' }
+              );
+            }
           }
         }
 
@@ -896,6 +954,14 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
               if (elapsed > maxMs) {
                 console.log(`[NightGuard] Auto-turning off channel ${ch.id} after ${nightGuard.maxHours}h`);
                 send(ch.id, false);
+                if (notificationPrefs.enabled) {
+                  const chName = names[ch.id] || `Switch ${ch.id}`;
+                  sendInstantNotification(
+                    '🛡️ Night Guard Auto-Off',
+                    `${chName} was turned off after ${nightGuard.maxHours}h to save electricity.`,
+                    { channelId: ch.id, type: 'night_guard' }
+                  );
+                }
               }
             }
           });
@@ -1197,6 +1263,11 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     openAuthModal,
     closeAuthModal,
     signOutUser,
+
+    // Smart & Push Notifications
+    notificationPrefs,
+    updateNotificationPrefs,
+    sendTestNotification,
   };
 
   return <HomeCtx.Provider value={value}>{children}</HomeCtx.Provider>;
