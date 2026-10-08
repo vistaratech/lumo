@@ -299,28 +299,16 @@ export async function signInWithEmail(
 /**
  * Sign in using Google account
  */
-export async function signInWithGoogle(
-  customEmail?: string,
-  customName?: string
-): Promise<{ success: boolean; user?: LumoUser; error?: string }> {
+export async function signInWithGoogle(): Promise<{ success: boolean; user?: LumoUser; error?: string }> {
   try {
-    const email = customEmail?.trim().toLowerCase() || 'user@gmail.com';
-    const name = customName?.trim() || email.split('@')[0];
-
-    const googleUser: LumoUser = {
-      uid: 'goog_' + Math.random().toString(36).substring(2, 10),
-      email,
-      displayName: name,
-      householdName: `${name}'s Smart Home`,
-      role: 'owner',
-      linkedDevices: ['ESP32_MINI_01'],
-      createdAt: Date.now(),
-      isGuest: false,
-    };
-
-    await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(googleUser));
-    notifyListeners(googleUser);
-    return { success: true, user: googleUser };
+    const { promptGoogleSignIn } = require('./googleAuth');
+    const res = await promptGoogleSignIn();
+    if (res.success && res.user) {
+      currentUser = res.user;
+      notifyListeners(res.user);
+      return res;
+    }
+    return { success: false, error: res.error || 'Google sign-in was not completed' };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Google sign-in failed' };
   }
