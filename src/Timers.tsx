@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { CHANNELS } from './config';
@@ -368,7 +368,7 @@ export default function Timers() {
 
       {/* Segment Selector: Timers vs Schedules */}
       <View style={[s.segmentContainer, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-        <Press
+        <Pressable
           onPress={() => {
             tap();
             setTab('countdown');
@@ -377,6 +377,8 @@ export default function Timers() {
             s.segmentBtn,
             tab === 'countdown' && {
               backgroundColor: colors.card,
+              borderColor: isDark ? colors.line : 'rgba(0,0,0,0.06)',
+              borderWidth: 1,
               shadowColor: '#000',
               shadowOpacity: isDark ? 0.22 : 0.08,
               shadowOffset: { width: 0, height: 2 },
@@ -397,9 +399,9 @@ export default function Timers() {
           >
             Timers
           </Text>
-        </Press>
+        </Pressable>
 
-        <Press
+        <Pressable
           onPress={() => {
             tap();
             setTab('routines');
@@ -408,6 +410,8 @@ export default function Timers() {
             s.segmentBtn,
             tab === 'routines' && {
               backgroundColor: colors.card,
+              borderColor: isDark ? colors.line : 'rgba(0,0,0,0.06)',
+              borderWidth: 1,
               shadowColor: '#000',
               shadowOpacity: isDark ? 0.22 : 0.08,
               shadowOffset: { width: 0, height: 2 },
@@ -428,7 +432,7 @@ export default function Timers() {
           >
             Schedules
           </Text>
-        </Press>
+        </Pressable>
       </View>
 
       {tab === 'countdown' ? (
