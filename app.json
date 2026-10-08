@@ -12,6 +12,14 @@
       "bundleIdentifier": "com.vistaratech.lumo",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1",
+              "lumo"
+            ]
+          }
+        ],
         "NSBluetoothAlwaysUsageDescription": "Lumo requires Bluetooth to discover and control your smart home ESP32 relays.",
         "NSBluetoothPeripheralUsageDescription": "Lumo requires Bluetooth to discover and control your smart home ESP32 relays."
       }

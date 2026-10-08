@@ -12,10 +12,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Google Client IDs from your Firebase console
 export const GOOGLE_CONFIG = {
   iosClientId: '1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1.apps.googleusercontent.com',
   webClientId: '1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1.apps.googleusercontent.com',
+  reversedClientId: 'com.googleusercontent.apps.1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1',
 };
 
 const STORAGE_KEY_USER = 'lumo.auth.user';
@@ -52,19 +52,24 @@ export async function promptGoogleSignIn(): Promise<{
     }
 
     // 2. Mobile (iOS / Android) Environment
-    // Build discovery and redirect URL using AuthSession
-    const redirectUri = AuthSession.makeRedirectUri({
-      scheme: 'lumo',
-      path: 'auth',
-    });
+    // On iOS Google requires the custom scheme to match the reversed client ID
+    const redirectUri =
+      Platform.OS === 'ios'
+        ? `${GOOGLE_CONFIG.reversedClientId}:/oauth2redirect/google`
+        : AuthSession.makeRedirectUri({
+            scheme: 'lumo',
+            path: 'auth',
+          });
 
     const clientId = Platform.OS === 'ios' ? GOOGLE_CONFIG.iosClientId : GOOGLE_CONFIG.webClientId;
 
+    // CRITICAL: usePKCE: false must be explicitly set because Google rejects code_challenge_method for id_token requests!
     const request = new AuthSession.AuthRequest({
       clientId,
       scopes: ['openid', 'profile', 'email'],
       responseType: AuthSession.ResponseType.IdToken,
       redirectUri,
+      usePKCE: false,
     });
 
     const discovery = {
@@ -97,7 +102,6 @@ export async function promptGoogleSignIn(): Promise<{
       return { success: false, error: 'Google sign-in was cancelled' };
     }
 
-    // Fallback: If in Expo Go or custom proxy environment
     return {
       success: false,
       error: 'Google Sign-In returned status: ' + result.type,
