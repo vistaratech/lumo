@@ -210,7 +210,7 @@ function ConnectButton({
   }));
 
   return (
-    <Press onPress={onPress}>
+    <Press style={{ flex: 1 }} onPress={onPress}>
       <View
         style={[
           s.connectBtn,
@@ -273,7 +273,7 @@ function WifiButton({
   const isConnecting = wifiStatus === 'connecting';
 
   return (
-    <Press onPress={onPress}>
+    <Press style={{ flex: 1 }} onPress={onPress}>
       <View
         style={[
           s.wifiHeaderBtn,
@@ -366,23 +366,24 @@ export default function Home() {
       {/* Top Header Bar */}
       <Animated.View entering={FadeInDown.duration(450)} style={s.top}>
         <View style={s.topHeaderRow}>
-          <Text style={[s.headerTitle, { color: colors.text }]}>Home</Text>
-          <View style={s.greetingRow}>
-            <Ionicons name={greetingIcon as any} size={15} color={greetingColor} />
-            <Text style={[s.greeting, { color: colors.dim }]}>
-              {h.user && !h.user.isGuest ? `${greeting}, ${h.user.displayName}` : greeting}
-            </Text>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={[s.headerTitle, { color: colors.text }]}>Home</Text>
+            <View style={s.greetingRow}>
+              <Ionicons name={greetingIcon as any} size={15} color={greetingColor} />
+              <Text style={[s.greeting, { color: colors.dim }]}>
+                {h.user && !h.user.isGuest ? `${greeting}, ${h.user.displayName.split(' ')[0]}` : greeting}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <View style={s.topActionsRow}>
+          {/* User Account / Profile Badge on top-right */}
           <Press
             onPress={() => {
               tap();
               h.openAuthModal();
             }}
             style={[
-              s.voiceBtn,
+              s.accountTopBadge,
               {
                 backgroundColor:
                   h.user && !h.user.isGuest
@@ -398,12 +399,12 @@ export default function Home() {
           >
             <Ionicons
               name={h.user && !h.user.isGuest ? 'shield-checkmark' : 'person-circle-outline'}
-              size={13}
+              size={15}
               color={h.user && !h.user.isGuest ? '#10B981' : colors.lamp}
             />
             <Text
               style={[
-                s.voiceBtnText,
+                s.accountTopBadgeText,
                 { color: h.user && !h.user.isGuest ? '#10B981' : colors.lamp },
               ]}
               numberOfLines={1}
@@ -411,7 +412,9 @@ export default function Home() {
               {h.user && !h.user.isGuest ? h.user.displayName.split(' ')[0] : 'Account'}
             </Text>
           </Press>
+        </View>
 
+        <View style={s.topActionsRow}>
           <Press
             onPress={() => {
               tap();
@@ -425,7 +428,7 @@ export default function Home() {
               },
             ]}
           >
-            <Ionicons name="mic" size={13} color="#38BDF8" />
+            <Ionicons name="mic" size={14} color="#38BDF8" />
             <Text style={s.voiceBtnText}>Voice</Text>
           </Press>
 
@@ -632,38 +635,60 @@ export default function Home() {
 
 const s = StyleSheet.create({
   top: {
-    paddingHorizontal: 24,
-    paddingTop: 18,
+    paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 14,
   },
   topHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 14,
+  },
+  accountTopBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1.5,
+  },
+  accountTopBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    maxWidth: 90,
   },
   topActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    width: '100%',
   },
   voiceBtn: {
+    flex: 1,
+    height: 38,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 6,
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
   voiceBtnText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#38BDF8',
   },
   connectBtn: {
+    width: '100%',
+    height: 38,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 6,
     borderRadius: 999,
     borderWidth: 1.5,
     shadowColor: '#000',
@@ -673,15 +698,17 @@ const s = StyleSheet.create({
     elevation: 2,
   },
   connectBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     letterSpacing: -0.1,
   },
   wifiHeaderBtn: {
+    width: '100%',
+    height: 38,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 6,
     borderRadius: 999,
     borderWidth: 1.5,
     shadowColor: '#000',
@@ -689,7 +716,6 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowRadius: 4,
     elevation: 2,
-    maxWidth: 130,
   },
   wifiHeaderBtnText: {
     fontSize: 12,
