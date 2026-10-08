@@ -63,13 +63,13 @@ export async function promptGoogleSignIn(): Promise<{
 
     const clientId = Platform.OS === 'ios' ? GOOGLE_CONFIG.iosClientId : GOOGLE_CONFIG.webClientId;
 
-    // CRITICAL: usePKCE: false must be explicitly set because Google rejects code_challenge_method for id_token requests!
+    // Use Authorization Code Flow with PKCE (standard and required by Google on iOS)
     const request = new AuthSession.AuthRequest({
       clientId,
       scopes: ['openid', 'profile', 'email'],
-      responseType: AuthSession.ResponseType.IdToken,
+      responseType: AuthSession.ResponseType.Code,
       redirectUri,
-      usePKCE: false,
+      usePKCE: true,
     });
 
     const discovery = {
@@ -80,8 +80,30 @@ export async function promptGoogleSignIn(): Promise<{
 
     const result = await request.promptAsync(discovery);
 
-    if (result.type === 'success' && result.params.id_token) {
-      const credential = GoogleAuthProvider.credential(result.params.id_token);
+    if (result.type === 'success') {
+      let idToken: string | undefined = result.params?.id_token;
+
+      // Exchange authorization code for tokens (id_token & access_token) using PKCE code_verifier
+      if (!idToken && result.params?.code) {
+        const tokenResponse = await AuthSession.exchangeCodeAsync(
+          {
+            clientId,
+            code: result.params.code,
+            redirectUri,
+            extraParams: {
+              code_verifier: request.codeVerifier || '',
+            },
+          },
+          discovery
+        );
+        idToken = tokenResponse.idToken;
+      }
+
+      if (!idToken) {
+        return { success: false, error: 'Could not obtain Google ID token' };
+      }
+
+      const credential = GoogleAuthProvider.credential(idToken);
       const userCredential = await signInWithCredential(auth, credential);
       const fbUser = userCredential.user;
 
