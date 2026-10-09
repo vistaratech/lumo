@@ -375,7 +375,7 @@ export function Header({
   badgeColor,
 }: {
   title: string;
-  sub: string;
+  sub?: string;
   colors?: ThemeColors;
   badgeIcon?: any;
   badgeColor?: string;
@@ -388,7 +388,7 @@ export function Header({
         </View>
       )}
       <Text style={[st.headerTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[st.headerSub, { color: colors.dim }]}>{sub}</Text>
+      {!!sub && <Text style={[st.headerSub, { color: colors.dim }]}>{sub}</Text>}
     </Animated.View>
   );
 }

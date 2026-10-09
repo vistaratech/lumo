@@ -12,7 +12,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { CHANNELS } from './config';
+import { ChannelConfig } from './config';
 import { Glow, Press, Ring, Toggle, mmss, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
@@ -20,6 +20,7 @@ import WifiModal from './WifiModal';
 import VoiceModal from './VoiceModal';
 import AddSceneModal from './AddSceneModal';
 import EditSwitchModal from './EditSwitchModal';
+import DeviceConnectModal from './DeviceConnectModal';
 
 const sinceLabel = (t: number | null, now: number) => {
   if (!t) return 'Active';
@@ -34,7 +35,7 @@ function Tile({
   index,
   onEdit,
 }: {
-  channel: (typeof CHANNELS)[number];
+  channel: ChannelConfig;
   index: number;
   onEdit?: (id: number) => void;
 }) {
@@ -48,7 +49,6 @@ function Tile({
   const end = h.timerEnd[id];
   const left = end ? Math.max(0, Math.round((end - h.now) / 1000)) : 0;
   const timerActive = left > 0;
-  const detail = timerActive ? `Auto-off in ${mmss(left)}` : sinceLabel(h.since[id] ?? null, h.now);
 
   const accentColor = isDark ? channel.color : channel.colorLight;
   const cardBgOn = isDark ? channel.darkBgOn : channel.lightBgOn;
@@ -197,7 +197,7 @@ function Tile({
                   { color: on ? accentColor : colors.dim },
                 ]}
               >
-                {pending ? 'Switching…' : on ? detail : 'Turned Off'}
+                {pending ? 'Switching…' : timerActive ? `Off in ${mmss(left)}` : on ? 'On' : 'Off'}
               </Text>
             </View>
           </View>
@@ -377,15 +377,17 @@ export default function Home() {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
-  const onCount = CHANNELS.filter((ch) => h.on[ch.id]).length;
+  const channels = h.channels;
+  const onCount = channels.filter((ch) => h.on[ch.id]).length;
   const hour = new Date(h.now).getHours();
 
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const greetingIcon = hour < 12 ? 'sunny' : hour < 17 ? 'partly-sunny' : 'moon';
   const greetingColor = hour < 12 ? '#FF9500' : hour < 17 ? '#F59E0B' : '#8B5CF6';
 
-  const allOnActive = onCount === CHANNELS.length && CHANNELS.length > 0;
+  const allOnActive = onCount === channels.length && channels.length > 0;
   const [bleModalOpen, setBleModalOpen] = useState(false);
+  const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const [wifiModalOpen, setWifiModalOpen] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [addSceneOpen, setAddSceneOpen] = useState(false);
@@ -479,7 +481,7 @@ export default function Home() {
             isDark={isDark}
             onPress={() => {
               tap();
-              setBleModalOpen(true);
+              setDeviceModalOpen(true);
             }}
           />
         </View>
@@ -508,24 +510,26 @@ export default function Home() {
             </View>
           )}
 
-          <Ring size={108} stroke={9} progress={onCount / CHANNELS.length} color={onCount > 0 ? colors.lamp : colors.dim}>
+          <Ring size={108} stroke={9} progress={channels.length > 0 ? onCount / channels.length : 0} color={onCount > 0 ? colors.lamp : colors.dim}>
             <Animated.Text
               key={onCount}
               entering={ZoomIn.duration(200).easing(Easing.out(Easing.cubic))}
               style={[s.heroNum, { color: colors.text }]}
             >
               {onCount}
-              <Text style={{ fontSize: 16, color: colors.dim }}>/{CHANNELS.length}</Text>
+              <Text style={{ fontSize: 16, color: colors.dim }}>/{channels.length}</Text>
             </Animated.Text>
           </Ring>
 
           <View style={{ flex: 1 }}>
             <Text style={[s.heroTitle, { color: colors.text }]}>
-              {onCount === 0 ? 'All Devices Off' : onCount === CHANNELS.length ? 'Full Illumination' : `${onCount} Active Device${onCount > 1 ? 's' : ''}`}
+              {onCount === 0 ? 'All Devices Off' : onCount === channels.length ? 'Full Illumination' : `${onCount} Active Device${onCount > 1 ? 's' : ''}`}
             </Text>
-            <Text style={[s.heroSub, { color: colors.dim }]}>
-              {!h.ready ? 'Connecting to controller...' : onCount === 0 ? 'Tap below to activate' : 'System running smoothly'}
-            </Text>
+            {!h.ready && (
+              <Text style={[s.heroSub, { color: colors.dim }]}>
+                Connecting…
+              </Text>
+            )}
 
             {/* Quick Action Buttons */}
             <View style={s.heroBtnRow}>
@@ -621,15 +625,24 @@ export default function Home() {
       {/* Section Header */}
       <View style={s.sectionHeader}>
         <Text style={[s.sectionTitle, { color: colors.dim }]}>CONTROLS</Text>
-        <View style={s.channelCountWrap}>
+        <Press
+          onPress={() => {
+            tap();
+            setDeviceModalOpen(true);
+          }}
+          style={s.channelCountWrap}
+        >
           <Ionicons name="hardware-chip-outline" size={13} color={colors.dim} />
-          <Text style={[s.sectionCount, { color: colors.dim }]}>{CHANNELS.length} switches</Text>
-        </View>
+          <Text style={[s.sectionCount, { color: colors.dim }]}>
+            {channels.length} switches • {h.selectedModel.name}
+          </Text>
+          <Ionicons name="swap-horizontal" size={13} color={colors.dim} />
+        </Press>
       </View>
 
       {/* Colorful Switch Tiles */}
       <View style={s.tiles}>
-        {CHANNELS.map((ch, i) => (
+        {channels.map((ch, i) => (
           <Tile
             key={ch.id}
             channel={ch}
@@ -638,6 +651,16 @@ export default function Home() {
           />
         ))}
       </View>
+
+      {/* 4-Step Hardware Device Connect & Test Wizard */}
+      <DeviceConnectModal
+        visible={deviceModalOpen || h.deviceConnectModalOpen}
+        onClose={() => {
+          setDeviceModalOpen(false);
+          h.closeDeviceConnectModal();
+        }}
+        onOpenWifi={() => setWifiModalOpen(true)}
+      />
 
       {/* Voice Assistant Modal */}
       <VoiceModal

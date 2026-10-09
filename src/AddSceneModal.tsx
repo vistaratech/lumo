@@ -79,7 +79,6 @@ export default function AddSceneModal({ visible, onClose }: AddSceneModalProps) 
           <View style={s.headerRow}>
             <View>
               <Text style={[s.title, { color: colors.text }]}>New Scene</Text>
-              <Text style={[s.sub, { color: colors.dim }]}>Create a custom 1-tap lighting preset</Text>
             </View>
             <Press onPress={onClose} style={[s.closeBtn, { backgroundColor: colors.surface }]}>
               <Ionicons name="close" size={20} color={colors.dim} />

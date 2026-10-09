@@ -129,7 +129,6 @@ export default function VoiceModal({ visible, onClose }: VoiceModalProps) {
           <View style={s.headerRow}>
             <View>
               <Text style={[s.title, { color: colors.text }]}>Voice Assistant</Text>
-              <Text style={[s.sub, { color: colors.dim }]}>Speak or tap commands to control devices</Text>
             </View>
             <Press onPress={onClose} style={[s.closeBtn, { backgroundColor: colors.surface }]}>
               <Ionicons name="close" size={20} color={colors.dim} />
@@ -140,7 +139,7 @@ export default function VoiceModal({ visible, onClose }: VoiceModalProps) {
           <View style={[s.micCircleWrapper, { backgroundColor: `${colors.lamp}12` }]}>
             <AudioWave active={isListening} color={colors.lamp} />
             <Text style={[s.listeningText, { color: colors.lamp }]}>
-              {isListening ? 'Listening for command...' : 'Tap any command below or type'}
+              {isListening ? 'Listening…' : 'Ready'}
             </Text>
           </View>
 

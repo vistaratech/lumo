@@ -9,12 +9,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { CHANNELS } from './config';
+import { ChannelConfig } from './config';
 import { Header, Press, StatusPill, ThemeColors, ThemeMode, Toggle, tap } from './theme';
 import { useHome } from './useHome';
 import BluetoothModal from './BluetoothModal';
 import WifiModal from './WifiModal';
 import WhatsNewModal from './WhatsNewModal';
+import DeviceConnectModal from './DeviceConnectModal';
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: any; color: string }[] = [
   { mode: 'dark', label: 'Dark', icon: 'moon', color: '#8B5CF6' },
@@ -151,7 +152,7 @@ const ROOM_PRESETS = [
   'Bathroom',
 ];
 
-function SwitchSetupCard({ channel }: { channel: (typeof CHANNELS)[number] }) {
+function SwitchSetupCard({ channel }: { channel: ChannelConfig }) {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
@@ -386,7 +387,7 @@ function AccountCard() {
             </View>
           </View>
           <Text style={[s.accountSub, { color: colors.dim }]}>
-            {user?.householdName || 'Local Switch Box'} • {user?.email || 'No cloud sync'}
+            {user?.householdName || 'My Home'} • {user?.email || 'Offline'}
           </Text>
         </View>
       </View>
@@ -403,7 +404,7 @@ function AccountCard() {
             }}
           >
             <Ionicons name="lock-closed" size={14} color="#FFFFFF" />
-            <Text style={s.accountBtnPrimaryText}>Secure My Switch Box (Sign In)</Text>
+            <Text style={s.accountBtnPrimaryText}>Sign In / Sync</Text>
           </Press>
         ) : (
           <View style={s.accountBtnRow}>
@@ -438,6 +439,7 @@ function AccountCard() {
 export default function Settings() {
   const h = useHome();
   const colors = h.colors;
+  const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const [bleModalOpen, setBleModalOpen] = useState(false);
   const [wifiModalOpen, setWifiModalOpen] = useState(false);
   const [whatsNewModalOpen, setWhatsNewModalOpen] = useState(false);
@@ -448,16 +450,57 @@ export default function Settings() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Header title="Settings" sub="Personalize your home control" colors={colors} />
+      <Header title="Settings" colors={colors} />
 
       {/* Household & Account Card */}
       <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
         <AccountCard />
       </View>
 
-      {/* Appearance Segment Control */}
+      {/* Hardware Controller Model & Pairing */}
       <Section
         i={0}
+        title="HARDWARE CONTROLLER"
+        icon="hardware-chip-outline"
+        iconColor={h.selectedModel.badgeColor}
+        dimColor={colors.dim}
+        colors={colors}
+      >
+        <Press
+          onPress={() => {
+            tap();
+            setDeviceModalOpen(true);
+          }}
+          style={[
+            s.row,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.line,
+              justifyContent: 'space-between',
+            },
+          ]}
+        >
+          <View style={s.rowLeft}>
+            <View style={[s.rowIconBox, { backgroundColor: `${h.selectedModel.badgeColor}20` }]}>
+              <Ionicons name="hardware-chip" size={16} color={h.selectedModel.badgeColor} />
+            </View>
+            <View>
+              <Text style={[s.rowLabel, { color: colors.text }]}>{h.selectedModel.name}</Text>
+              <Text style={{ fontSize: 11.5, color: colors.dim }}>
+                {h.selectedModel.channels} Channels • {h.selectedModel.tag}
+              </Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 12.5, color: '#38BDF8', fontWeight: '600' }}>Setup / Change</Text>
+            <Ionicons name="chevron-forward" size={15} color="#38BDF8" />
+          </View>
+        </Press>
+      </Section>
+
+      {/* Appearance Segment Control */}
+      <Section
+        i={1}
         title="APPEARANCE"
         icon="color-palette"
         iconColor="#8B5CF6"
@@ -473,14 +516,14 @@ export default function Settings() {
 
       {/* Switch & Room Setup Section */}
       <Section
-        i={1}
+        i={2}
         title="SWITCH & ROOM SETUP"
         icon="layers-outline"
         iconColor="#FF9500"
         dimColor={colors.dim}
         colors={colors}
       >
-        {CHANNELS.map((ch) => (
+        {h.channels.map((ch) => (
           <SwitchSetupCard key={ch.id} channel={ch} />
         ))}
       </Section>
@@ -558,9 +601,6 @@ export default function Settings() {
             </View>
             <View>
               <Text style={[s.rowLabel, { color: colors.text }]}>Auto-Off Protection</Text>
-              <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
-                Turn off lights left on continuously
-              </Text>
             </View>
           </View>
           <Toggle value={h.nightGuard.enabled} colors={colors} activeColor="#38BDF8" />
@@ -652,9 +692,6 @@ export default function Settings() {
             </View>
             <View>
               <Text style={[s.rowLabel, { color: colors.text }]}>Push & Smart Alerts</Text>
-              <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
-                App reminders & status banners on phone
-              </Text>
             </View>
           </View>
           <Toggle value={h.notificationPrefs.enabled} colors={colors} activeColor="#F59E0B" />
@@ -682,9 +719,6 @@ export default function Settings() {
                 </View>
                 <View>
                   <Text style={[s.rowLabel, { color: colors.text }]}>🌙 Night Sleep-Check (10:00 PM)</Text>
-                  <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
-                    Bedtime alert to turn off idle lights & save energy
-                  </Text>
                 </View>
               </View>
               <Toggle value={h.notificationPrefs.nightReminder} colors={colors} activeColor="#8B5CF6" />
@@ -710,9 +744,6 @@ export default function Settings() {
                 </View>
                 <View>
                   <Text style={[s.rowLabel, { color: colors.text }]}>☀️ Morning Routine (8:00 AM)</Text>
-                  <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
-                    Daily morning reminder to start your day with Lumo
-                  </Text>
                 </View>
               </View>
               <Toggle value={h.notificationPrefs.morningDigest} colors={colors} activeColor="#FF9500" />
@@ -738,9 +769,6 @@ export default function Settings() {
                 </View>
                 <View>
                   <Text style={[s.rowLabel, { color: colors.text }]}>⏱️ Timer Completion Alerts</Text>
-                  <Text style={{ fontSize: 11, color: colors.dim, marginTop: 2 }}>
-                    Notifies when countdown timers turn off a switch
-                  </Text>
                 </View>
               </View>
               <Toggle value={h.notificationPrefs.timerAlerts} colors={colors} activeColor="#06D6A0" />
@@ -774,11 +802,6 @@ export default function Settings() {
                       : 'Notification Permission Pending'}
                   </Text>
                 </View>
-                <Text style={{ fontSize: 11, color: colors.dim, marginLeft: 16 }}>
-                  {h.notificationPrefs.pushToken
-                    ? 'Registered for Remote & Local Push Alerts'
-                    : 'Local Scheduled Alerts Enabled'}
-                </Text>
               </View>
 
               <Press
@@ -790,7 +813,7 @@ export default function Settings() {
               >
                 <Ionicons name="paper-plane-outline" size={16} color={colors.lamp} />
                 <Text style={[s.testNotifBtnText, { color: colors.lamp }]}>
-                  Send Test Notification Now
+                  Send Test Notification
                 </Text>
               </Press>
             </View>
@@ -930,6 +953,16 @@ export default function Settings() {
           />
         </Press>
       </Section>
+
+      {/* Hardware Setup & Multi-Channel Test Wizard Modal */}
+      <DeviceConnectModal
+        visible={deviceModalOpen || h.deviceConnectModalOpen}
+        onClose={() => {
+          setDeviceModalOpen(false);
+          h.closeDeviceConnectModal();
+        }}
+        onOpenWifi={() => setWifiModalOpen(true)}
+      />
 
       {/* Bluetooth Discovery Modal */}
       <BluetoothModal visible={bleModalOpen} onClose={() => setBleModalOpen(false)} />

@@ -18,7 +18,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { CHANNELS } from './src/config';
 import { Glow, tap } from './src/theme';
 import { HomeProvider, useHome } from './src/useHome';
 import Splash from './src/Splash';
@@ -129,13 +128,13 @@ function Shell() {
   const [tab, setTab] = useState(0);
   const dir = useRef(1);
 
-  const onCount = CHANNELS.filter((ch) => h.on[ch.id]).length;
+  const onCount = h.channels.filter((ch) => h.on[ch.id]).length;
   const glowP = useSharedValue(0);
   const breathe = useSharedValue(0);
 
   useEffect(() => {
-    glowP.value = withTiming(onCount / CHANNELS.length, { duration: reduce ? 0 : 900 });
-  }, [onCount, reduce]);
+    glowP.value = withTiming(h.channels.length > 0 ? onCount / h.channels.length : 0, { duration: reduce ? 0 : 900 });
+  }, [onCount, reduce, h.channels.length]);
 
   useEffect(() => {
     if (reduce) return;

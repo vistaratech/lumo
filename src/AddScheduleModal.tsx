@@ -84,7 +84,6 @@ export default function AddScheduleModal({ visible, onClose }: AddScheduleModalP
           <View style={s.headerRow}>
             <View>
               <Text style={[s.title, { color: colors.text }]}>Add Daily Routine</Text>
-              <Text style={[s.sub, { color: colors.dim }]}>Automate lights at specific times every day</Text>
             </View>
             <Press onPress={onClose} style={[s.closeBtn, { backgroundColor: colors.surface }]}>
               <Ionicons name="close" size={20} color={colors.dim} />

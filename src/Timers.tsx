@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { CHANNELS } from './config';
+import { ChannelConfig } from './config';
 import { Header, Press, Ring, Toggle, mmss, tap } from './theme';
 import { ScheduleItem, useHome } from './useHome';
 import AddScheduleModal from './AddScheduleModal';
@@ -127,7 +127,7 @@ function CustomModal({
   );
 }
 
-function TimerCard({ channel, index }: { channel: (typeof CHANNELS)[number]; index: number }) {
+function TimerCard({ channel, index }: { channel: ChannelConfig; index: number }) {
   const h = useHome();
   const colors = h.colors;
   const isDark = h.isDark;
@@ -362,7 +362,6 @@ export default function Timers() {
     <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
       <Header
         title="Timers"
-        sub="Auto-off countdowns & daily schedules"
         colors={colors}
       />
 
@@ -437,7 +436,7 @@ export default function Timers() {
 
       {tab === 'countdown' ? (
         <View style={s.list}>
-          {CHANNELS.map((ch, i) => (
+          {h.channels.map((ch, i) => (
             <TimerCard key={ch.id} channel={ch} index={i} />
           ))}
         </View>

@@ -1,32 +1,26 @@
 /**
  * ============================================================================
  * Lumo Smart Home Hub — Dual Bluetooth BLE + Wi-Fi/MQTT Relay Controller
- * Hardware: ESP32-C3 Super Mini + 2-Channel Relay Module
+ * Hardware: ESP32 / ESP32-C3 / ESP32-S3 + Multi-Channel Relay Module (1-16 CH)
+ *
+ * Supported Models:
+ *   LUMO R1 (1 CH), LUMO R2 (2 CH), LUMO R3 (3 CH), LUMO R4 (4 CH),
+ *   LUMO R6 (6 CH), LUMO R8 (8 CH), LUMO R12 (12 CH), LUMO R16 (16 CH)
  * 
  * Features:
  *   1. Bluetooth Low Energy (BLE) with name "Lumo-ESP32"
  *      - Direct local control from Chrome browser (Web Bluetooth) or Phone App
+ *      - Dynamic Channel Announcement ("CONFIG:CHANNELS:<count>")
  *      - In-app Non-Blocking Wi-Fi Provisioning (scans & connects nearby 2.4GHz)
  *      - UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
  *      - Characteristic: beb5483e-36e1-4688-b7f5-ea07361b26a8
  *      - Negotiated 517-byte MTU for fast, complete network packet transfer
  *   2. Wi-Fi + Cloud MQTT (broker.emqx.io / HiveMQ Cloud)
  *      - Worldwide control from SIM Mobile Data (4G/5G) or any remote Wi-Fi
+ *      - Dynamic MQTT topics: home/esp32/relay1/set ... home/esp32/relay{N}/set
  *      - Wi-Fi credentials stored permanently in Flash memory (NVS Preferences)
  *      - Non-blocking (Bluetooth works even if Wi-Fi is disconnected)
  *   3. On-board hardware countdown timers that finish on the chip
- *
- * Pinout:
- *   IN1 (Relay 1) -> GPIO 2
- *   IN2 (Relay 2) -> GPIO 3
- *   VCC           -> 5V / 3.3V
- *   GND           -> GND
- *   LED (Optional)-> GPIO 8 (On-board blue LED on ESP32-C3 Super Mini)
- *
- * Arduino IDE Settings:
- *   Board: "ESP32C3 Dev Module" (or "Nologo ESP32C3 Super Mini")
- *   USB CDC On Boot: "Enabled"
- *   Partition Scheme: "Huge APP (3MB No OTA/1MB SPIFFS)"
  * ============================================================================
  */
 
@@ -38,32 +32,33 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-// ── Hardware Pins ─────────────────────────────────────────────────────────
-const int RELAY_PIN[2] = {2, 3};   // IN1 -> GPIO2, IN2 -> GPIO3
-const int LED_PIN      = 8;        // ESP32-C3 Super Mini on-board LED
-const bool ACTIVE_LOW  = true;     // Most relay boards: LOW = ON, HIGH = OFF
-const bool LED_ACTIVE_LOW = true;  // ESP32-C3 Super Mini LED is active LOW
+// ── Hardware Configuration (Change NUM_CHANNELS to match your board!) ──────
+// Set to 1, 2, 3, 4, 6, 8, 12, or 16
+#define NUM_CHANNELS        2
+
+// Pin definitions for up to 16 relays (customize GPIOs for your specific ESP32 board):
+// Default mapping covers ESP32 DevKit and ESP32-C3
+const int RELAY_PINS[16] = {2, 3, 4, 5, 12, 13, 14, 15, 18, 19, 21, 22, 23, 25, 26, 27};
+const int LED_PIN        = 8;        // ESP32-C3 Super Mini on-board LED (or GPIO 2 on classic ESP32)
+const bool ACTIVE_LOW    = true;     // Most relay boards: LOW = ON, HIGH = OFF
+const bool LED_ACTIVE_LOW = true;    // ESP32-C3 LED is active LOW
 
 // ── BLE UUIDs (Must match Mobile / Web App) ───────────────────────────────
 #define BLE_DEVICE_NAME     "Lumo-ESP32"
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-// ── Default Cloud MQTT Broker (Free, fast public cluster with WSS support) 
+// ── Default Cloud MQTT Broker ─────────────────────────────────────────────
 const char* DEFAULT_MQTT_HOST = "broker.emqx.io";
 const uint16_t DEFAULT_MQTT_PORT = 1883;
 
 // ── MQTT Topics ───────────────────────────────────────────────────────────
-const char* TOPIC_STATUS        = "home/esp32/status";
-const char* TOPIC_SET[2]        = {"home/esp32/relay1/set",       "home/esp32/relay2/set"};
-const char* TOPIC_STATE[2]      = {"home/esp32/relay1/state",     "home/esp32/relay2/state"};
-const char* TOPIC_TIMER_SET[2]  = {"home/esp32/relay1/timer/set", "home/esp32/relay2/timer/set"};
-const char* TOPIC_TIMER[2]      = {"home/esp32/relay1/timer",     "home/esp32/relay2/timer"};
+const char* TOPIC_STATUS = "home/esp32/status";
 
 // ── Global State ──────────────────────────────────────────────────────────
-bool relayOn[2] = {false, false};
-bool timerOn[2] = {false, false};
-unsigned long offAt[2] = {0, 0};
+bool relayOn[16] = {false};
+bool timerOn[16] = {false};
+unsigned long offAt[16] = {0};
 unsigned long lastTick = 0;
 unsigned long lastWifiCheck = 0;
 unsigned long wifiConnectStart = 0;
@@ -92,13 +87,19 @@ PubSubClient mqtt(netClient);
 
 // ── Helper: Apply Relay Physical Output ───────────────────────────────────
 void applyRelay(int i) {
+  if (i < 0 || i >= NUM_CHANNELS) return;
   bool level = ACTIVE_LOW ? !relayOn[i] : relayOn[i];
-  digitalWrite(RELAY_PIN[i], level ? HIGH : LOW);
+  digitalWrite(RELAY_PINS[i], level ? HIGH : LOW);
 }
 
-// ── Helper: Format Relay Status String for BLE ────────────────────────────
+// ── Helper: Format Relay Status String for BLE (e.g. R1:0,R2:1,R3:0...) ───
 String getStatusString() {
-  return "R1:" + String(relayOn[0] ? "1" : "0") + ",R2:" + String(relayOn[1] ? "1" : "0");
+  String res = "";
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    if (i > 0) res += ",";
+    res += "R" + String(i + 1) + ":" + String(relayOn[i] ? "1" : "0");
+  }
+  return res;
 }
 
 // ── Helper: Format Wi-Fi Status String for BLE ────────────────────────────
@@ -125,9 +126,12 @@ void notifyBle(String msg) {
 
 // ── Helper: Publish State over BLE and MQTT ───────────────────────────────
 void publishState(int i) {
+  if (i < 0 || i >= NUM_CHANNELS) return;
+
   // 1. MQTT publish (if connected)
   if (mqtt.connected()) {
-    mqtt.publish(TOPIC_STATE[i], relayOn[i] ? "ON" : "OFF", true);
+    String stateTopic = "home/esp32/relay" + String(i + 1) + "/state";
+    mqtt.publish(stateTopic.c_str(), relayOn[i] ? "ON" : "OFF", true);
   }
 
   // 2. BLE notify
@@ -136,6 +140,7 @@ void publishState(int i) {
 
 // ── Helper: Publish Timer Countdown ───────────────────────────────────────
 void publishTimer(int i) {
+  if (i < 0 || i >= NUM_CHANNELS) return;
   long left = 0;
   if (timerOn[i]) {
     long ms = (long)(offAt[i] - millis());
@@ -145,11 +150,13 @@ void publishTimer(int i) {
   snprintf(buf, sizeof(buf), "%ld", left);
 
   if (mqtt.connected()) {
-    mqtt.publish(TOPIC_TIMER[i], buf, true);
+    String timerTopic = "home/esp32/relay" + String(i + 1) + "/timer";
+    mqtt.publish(timerTopic.c_str(), buf, true);
   }
 }
 
 void cancelTimer(int i) {
+  if (i < 0 || i >= NUM_CHANNELS) return;
   if (!timerOn[i]) return;
   timerOn[i] = false;
   publishTimer(i);
@@ -174,23 +181,21 @@ void startWifiConnection(String ssid, String pass) {
 
 // ── Non-Blocking Wi-Fi Scan Handler (Called in loop()) ────────────────────
 void handleWifiScan() {
-  // 1. Start scan if requested
   if (scanWifiRequested) {
     scanWifiRequested = false;
 
-    if (isScanningWifi) return; // Already scanning
+    if (isScanningWifi) return;
 
-    // Temporarily disconnect pending Wi-Fi connection attempt so channel scan succeeds
     if (isConnectingWifi) {
       WiFi.disconnect();
       isConnectingWifi = false;
     }
 
     WiFi.mode(WIFI_STA);
-    WiFi.scanDelete(); // Free previous scan buffers
+    WiFi.scanDelete();
 
     Serial.println("[WiFi] Starting non-blocking 2.4 GHz scan...");
-    int16_t res = WiFi.scanNetworks(true /* async */, false /* don't show hidden */);
+    int16_t res = WiFi.scanNetworks(true, false);
     if (res == WIFI_SCAN_RUNNING) {
       isScanningWifi = true;
       scanWifiStart = millis();
@@ -200,7 +205,6 @@ void handleWifiScan() {
     }
   }
 
-  // 2. Poll for async scan results
   if (isScanningWifi) {
     int16_t n = WiFi.scanComplete();
 
@@ -243,7 +247,6 @@ void handleWifiScan() {
 
       WiFi.scanDelete();
 
-      // If we had a saved Wi-Fi and we are not connected, resume connection
       if (savedSsid.length() > 0 && WiFi.status() != WL_CONNECTED) {
         Serial.println("[WiFi] Resuming connection to " + savedSsid);
         WiFi.begin(savedSsid.c_str(), savedPass.c_str());
@@ -286,7 +289,6 @@ void processCommand(String rawCmd) {
       newSsid.trim();
       newPass.trim();
       
-      // Save permanently in NVS Flash
       prefs.putString("ssid", newSsid);
       prefs.putString("pass", newPass);
       Serial.println("[WiFi] Saved new credentials in Flash: " + newSsid);
@@ -312,94 +314,114 @@ void processCommand(String rawCmd) {
     return;
   }
 
-  // ── Relay Control Commands ──
-  // Relay 1 Commands
-  if (cmd == "R1_ON" || cmd == "1:ON" || cmd == "RELAY1:ON") {
-    relayOn[0] = true;
-    applyRelay(0);
-    cancelTimer(0);
-    publishState(0);
-  } else if (cmd == "R1_OFF" || cmd == "1:OFF" || cmd == "RELAY1:OFF") {
-    relayOn[0] = false;
-    applyRelay(0);
-    cancelTimer(0);
-    publishState(0);
-  } else if (cmd == "R1_TOGGLE") {
-    relayOn[0] = !relayOn[0];
-    applyRelay(0);
-    cancelTimer(0);
-    publishState(0);
-  }
-  // Relay 2 Commands
-  else if (cmd == "R2_ON" || cmd == "2:ON" || cmd == "RELAY2:ON") {
-    relayOn[1] = true;
-    applyRelay(1);
-    cancelTimer(1);
-    publishState(1);
-  } else if (cmd == "R2_OFF" || cmd == "2:OFF" || cmd == "RELAY2:OFF") {
-    relayOn[1] = false;
-    applyRelay(1);
-    cancelTimer(1);
-    publishState(1);
-  } else if (cmd == "R2_TOGGLE") {
-    relayOn[1] = !relayOn[1];
-    applyRelay(1);
-    cancelTimer(1);
-    publishState(1);
-  }
-  // All On / All Off
-  else if (cmd == "ALL_ON") {
-    for (int i = 0; i < 2; i++) {
-      relayOn[i] = true;
-      applyRelay(i);
-      cancelTimer(i);
-      publishState(i);
-    }
-  } else if (cmd == "ALL_OFF") {
-    for (int i = 0; i < 2; i++) {
-      relayOn[i] = false;
-      applyRelay(i);
-      cancelTimer(i);
-      publishState(i);
-    }
-  }
-  // Status Query
-  else if (cmd == "STATUS" || cmd == "GET") {
-    notifyBle(getStatusString());
-  }
-  // Timers: e.g. "TIMER:1:15" (Relay 1 for 15 mins)
-  else if (cmd.startsWith("TIMER:")) {
-    int firstColon = cmd.indexOf(':');
-    int secondColon = cmd.indexOf(':', firstColon + 1);
-    if (firstColon != -1 && secondColon != -1) {
-      int relayIdx = cmd.substring(firstColon + 1, secondColon).toInt() - 1;
-      int minutes = cmd.substring(secondColon + 1).toInt();
-      if (relayIdx >= 0 && relayIdx < 2) {
-        if (minutes > 0) {
-          relayOn[relayIdx] = true;
-          applyRelay(relayIdx);
-          publishState(relayIdx);
-          timerOn[relayIdx] = true;
-          offAt[relayIdx] = millis() + (unsigned long)minutes * 60000UL;
-          publishTimer(relayIdx);
-        } else {
-          cancelTimer(relayIdx);
+  // ── Generic Multi-Channel Relay Commands (R<id>_ON, R<id>_OFF, R<id>_TOGGLE, R<id>:1, R<id>:0) ──
+  if (cmd.startsWith("R")) {
+    int underscore = cmd.indexOf('_');
+    int colon = cmd.indexOf(':');
+    int splitIdx = (underscore != -1) ? underscore : colon;
+    if (splitIdx != -1) {
+      int ch = cmd.substring(1, splitIdx).toInt();
+      if (ch >= 1 && ch <= NUM_CHANNELS) {
+        String action = cmd.substring(splitIdx + 1);
+        int idx = ch - 1;
+        if (action == "ON" || action == "1") {
+          relayOn[idx] = true;
+        } else if (action == "OFF" || action == "0") {
+          relayOn[idx] = false;
+        } else if (action == "TOGGLE") {
+          relayOn[idx] = !relayOn[idx];
         }
+        applyRelay(idx);
+        cancelTimer(idx);
+        publishState(idx);
+        return;
       }
     }
   }
 
-  Serial.println("[CMD] " + cmd + " -> R1=" + String(relayOn[0]) + ", R2=" + String(relayOn[1]));
+  // Number:State format (e.g. "1:ON", "2:OFF")
+  int numColon = cmd.indexOf(':');
+  if (numColon != -1) {
+    int ch = cmd.substring(0, numColon).toInt();
+    if (ch >= 1 && ch <= NUM_CHANNELS) {
+      String action = cmd.substring(numColon + 1);
+      int idx = ch - 1;
+      if (action == "ON" || action == "1") {
+        relayOn[idx] = true;
+      } else if (action == "OFF" || action == "0") {
+        relayOn[idx] = false;
+      }
+      applyRelay(idx);
+      cancelTimer(idx);
+      publishState(idx);
+      return;
+    }
+  }
+
+  // All On / All Off
+  if (cmd == "ALL_ON") {
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+      relayOn[i] = true;
+      applyRelay(i);
+      cancelTimer(i);
+    }
+    for (int i = 0; i < NUM_CHANNELS; i++) publishState(i);
+    return;
+  } else if (cmd == "ALL_OFF") {
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+      relayOn[i] = false;
+      applyRelay(i);
+      cancelTimer(i);
+    }
+    for (int i = 0; i < NUM_CHANNELS; i++) publishState(i);
+    return;
+  }
+
+  // Status & Hardware Identification Query
+  if (cmd == "STATUS" || cmd == "GET" || cmd == "IDENTIFY" || cmd == "GET_CONFIG") {
+    notifyBle("CONFIG:CHANNELS:" + String(NUM_CHANNELS));
+    delay(40);
+    notifyBle(getStatusString());
+    return;
+  }
+
+  // Timer Command: "TIMER:<channel>:<minutes>"
+  if (cmd.startsWith("TIMER:")) {
+    int c1 = cmd.indexOf(':');
+    int c2 = cmd.indexOf(':', c1 + 1);
+    if (c1 != -1 && c2 != -1) {
+      int ch = cmd.substring(c1 + 1, c2).toInt();
+      long mins = cmd.substring(c2 + 1).toInt();
+      if (ch >= 1 && ch <= NUM_CHANNELS) {
+        int idx = ch - 1;
+        if (mins > 0) {
+          relayOn[idx] = true;
+          applyRelay(idx);
+          publishState(idx);
+          timerOn[idx] = true;
+          offAt[idx] = millis() + (unsigned long)mins * 60000UL;
+          publishTimer(idx);
+        } else {
+          cancelTimer(idx);
+        }
+      }
+    }
+    return;
+  }
+
+  Serial.println("[CMD] Unrecognized command: " + rawCmd);
 }
 
 // ── BLE Server Callbacks ──────────────────────────────────────────────────
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) override {
     bleClientConnected = true;
-    digitalWrite(LED_PIN, LED_ACTIVE_LOW ? LOW : HIGH); // Turn LED ON
+    digitalWrite(LED_PIN, LED_ACTIVE_LOW ? LOW : HIGH);
     Serial.println("[BLE] Client connected!");
     
-    // Send initial status and Wi-Fi state immediately upon connect
+    // Announce dynamic channel count, initial status and Wi-Fi state
+    delay(100);
+    notifyBle("CONFIG:CHANNELS:" + String(NUM_CHANNELS));
     delay(100);
     notifyBle(getStatusString());
     delay(100);
@@ -408,12 +430,12 @@ class ServerCallbacks : public BLEServerCallbacks {
 
   void onDisconnect(BLEServer* pServer) override {
     bleClientConnected = false;
-    digitalWrite(LED_PIN, LED_ACTIVE_LOW ? HIGH : LOW); // Turn LED OFF
+    digitalWrite(LED_PIN, LED_ACTIVE_LOW ? HIGH : LOW);
     Serial.println("[BLE] Client disconnected!");
   }
 };
 
-// ── BLE Characteristic Callbacks (Writes from Browser / App) ─────────────
+// ── BLE Characteristic Callbacks ──────────────────────────────────────────
 class CharacteristicCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* pChar) override {
     String value = pChar->getValue().c_str();
@@ -428,7 +450,7 @@ void setupBLE() {
   Serial.println("[BLE] Initializing Bluetooth LE: " BLE_DEVICE_NAME " ...");
 
   BLEDevice::init(BLE_DEVICE_NAME);
-  BLEDevice::setMTU(517); // Allow up to 512-byte ATT MTU for full Wi-Fi network & state packets
+  BLEDevice::setMTU(517);
 
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks());
@@ -450,12 +472,11 @@ void setupBLE() {
 
   pService->start();
 
-  // Fast advertising profile
   BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06); // 7.5ms min interval
-  pAdvertising->setMaxPreferred(0x0C); // 15ms max interval
+  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMaxPreferred(0x0C);
   BLEDevice::startAdvertising();
 
   Serial.println("[BLE] Advertising ready! Search for: " BLE_DEVICE_NAME);
@@ -467,13 +488,16 @@ void onMqttMessage(char* topic, byte* payload, unsigned int len) {
   String body = "";
   for (unsigned int k = 0; k < len; k++) body += (char)payload[k];
 
-  for (int i = 0; i < 2; i++) {
-    if (t == TOPIC_SET[i]) {
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    String setTopic = "home/esp32/relay" + String(i + 1) + "/set";
+    String timerTopic = "home/esp32/relay" + String(i + 1) + "/timer/set";
+
+    if (t == setTopic) {
       relayOn[i] = (body == "ON");
       applyRelay(i);
       publishState(i);
       if (!relayOn[i]) cancelTimer(i);
-    } else if (t == TOPIC_TIMER_SET[i]) {
+    } else if (t == timerTopic) {
       long minutes = body.toInt();
       if (minutes > 0) {
         relayOn[i] = true;
@@ -491,36 +515,24 @@ void onMqttMessage(char* topic, byte* payload, unsigned int len) {
 
 // ── Non-Blocking Wi-Fi & MQTT Loop ────────────────────────────────────────
 void checkWifiAndMqtt() {
-  // If scan is currently running, don't interrupt RF channel scan
   if (isScanningWifi || scanWifiRequested) return;
-
-  // If no saved Wi-Fi, do nothing
   if (savedSsid.length() == 0) return;
 
-  // 1. Wi-Fi Status Check
   if (WiFi.status() == WL_CONNECTED) {
     if (!wifiWasConnected) {
       wifiWasConnected = true;
       isConnectingWifi = false;
-      String ip = WiFi.localIP().toString();
-      Serial.println("[WiFi] Connected! IP: " + ip);
-      notifyBle("WIFI_STATE:CONNECTED:" + ip + ":" + savedSsid);
+      Serial.println("[WiFi] Connected! IP: " + WiFi.localIP().toString());
+      notifyBle(getWifiStatusString());
     }
   } else {
-    if (wifiWasConnected) {
-      wifiWasConnected = false;
-      Serial.println("[WiFi] Lost connection to: " + savedSsid);
-      notifyBle("WIFI_STATE:DISCONNECTED:" + savedSsid);
-    }
-
-    // If we were connecting and timed out after 20 seconds
-    if (isConnectingWifi && millis() - wifiConnectStart > 20000) {
+    wifiWasConnected = false;
+    if (isConnectingWifi && millis() - wifiConnectStart > 18000) {
       isConnectingWifi = false;
-      Serial.println("[WiFi] Connection failed / timed out for: " + savedSsid);
+      Serial.println("[WiFi] Connection timed out");
       notifyBle("WIFI_STATE:FAILED");
     }
 
-    // Periodic Wi-Fi reconnect attempt every 25 seconds
     if (!isConnectingWifi && millis() - lastWifiCheck > 25000) {
       lastWifiCheck = millis();
       Serial.println("[WiFi] Re-attempting Wi-Fi connection to: " + savedSsid);
@@ -532,7 +544,6 @@ void checkWifiAndMqtt() {
     return;
   }
 
-  // 2. Cloud MQTT Client Connection (Worldwide remote control)
   if (!mqtt.connected()) {
     static unsigned long lastMqttAttempt = 0;
     if (millis() - lastMqttAttempt > 6000) {
@@ -543,9 +554,11 @@ void checkWifiAndMqtt() {
       if (mqtt.connect(id.c_str(), TOPIC_STATUS, 1, true, "offline")) {
         Serial.println("[MQTT] Connected to Cloud Broker successfully!");
         mqtt.publish(TOPIC_STATUS, "online", true);
-        for (int i = 0; i < 2; i++) {
-          mqtt.subscribe(TOPIC_SET[i], 1);
-          mqtt.subscribe(TOPIC_TIMER_SET[i], 1);
+        for (int i = 0; i < NUM_CHANNELS; i++) {
+          String setTopic = "home/esp32/relay" + String(i + 1) + "/set";
+          String timerTopic = "home/esp32/relay" + String(i + 1) + "/timer/set";
+          mqtt.subscribe(setTopic.c_str(), 1);
+          mqtt.subscribe(timerTopic.c_str(), 1);
           publishState(i);
           publishTimer(i);
         }
@@ -561,37 +574,37 @@ void checkWifiAndMqtt() {
 // ── Setup ─────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
-  Serial.setTxTimeoutMs(0); // Eliminates serial blocking when terminal is closed
+  Serial.setTxTimeoutMs(0);
   delay(100);
 
   Serial.println("\n========================================");
-  Serial.println("  LUMO SMART HUB — ESP32-C3 SUPER MINI  ");
+  Serial.println("  LUMO SMART HUB — ESP32 CONTROLLER     ");
+  Serial.printf ("  Configured Channels: %d Relays\n", NUM_CHANNELS);
   Serial.println("========================================");
 
-  // Initialize Relay Output Pins to OFF immediately (avoids startup clicks)
-  for (int i = 0; i < 2; i++) {
+  // Initialize Relay Output Pins
+  for (int i = 0; i < NUM_CHANNELS; i++) {
     applyRelay(i);
-    pinMode(RELAY_PIN[i], OUTPUT);
+    pinMode(RELAY_PINS[i], OUTPUT);
     applyRelay(i);
   }
 
   // Initialize LED Pin
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LED_ACTIVE_LOW ? HIGH : LOW); // LED OFF initially
+  digitalWrite(LED_PIN, LED_ACTIVE_LOW ? HIGH : LOW);
 
-  // Initialize Flash Preferences (NVS storage for Wi-Fi)
+  // Initialize NVS storage
   prefs.begin("lumo_cfg", false);
   savedSsid = prefs.getString("ssid", "");
   savedPass = prefs.getString("pass", "");
 
-  // Initialize Bluetooth Low Energy immediately
+  // Initialize Bluetooth Low Energy
   setupBLE();
 
   // Setup MQTT Client
   mqtt.setServer(DEFAULT_MQTT_HOST, DEFAULT_MQTT_PORT);
   mqtt.setCallback(onMqttMessage);
 
-  // Start Wi-Fi if saved credentials exist
   if (savedSsid.length() > 0) {
     Serial.println("[WiFi] Found saved network in Flash: " + savedSsid);
     startWifiConnection(savedSsid, savedPass);
@@ -616,7 +629,7 @@ void loop() {
   }
 
   // 2. Hardware Timer Countdown on chip
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < NUM_CHANNELS; i++) {
     if (timerOn[i] && (long)(millis() - offAt[i]) >= 0) {
       Serial.println("[TIMER] Relay " + String(i + 1) + " finished. Turning OFF.");
       relayOn[i] = false;
@@ -630,12 +643,12 @@ void loop() {
   // 3. Periodic countdown sync every 10 seconds
   if (millis() - lastTick >= 10000) {
     lastTick = millis();
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < NUM_CHANNELS; i++) {
       if (timerOn[i]) publishTimer(i);
     }
   }
 
-  // 4. Non-blocking Wi-Fi scan handler (so Bluetooth never disconnects during scan)
+  // 4. Non-blocking Wi-Fi scan handler
   handleWifiScan();
 
   // 5. Non-blocking Wi-Fi & Cloud MQTT handling

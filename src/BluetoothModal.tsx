@@ -330,17 +330,15 @@ export default function BluetoothModal({
                 : 'Connect to Lumo'}
             </Text>
 
-            <Text style={[s.modalDesc, { color: colors.dim }]}>
-              {isConnected
-                ? 'Device paired and communication is active.'
-                : phase === 'SCANNING'
-                ? 'Searching for actual Bluetooth peripherals nearby…'
-                : phase === 'NOT_FOUND'
-                ? 'No Bluetooth devices are turned on nearby. Make sure your ESP32 is powered and advertising.'
-                : phase === 'EXPO_GO_INFO'
-                ? 'Expo Go does not include native Bluetooth modules. Real Bluetooth hardware scanning requires an Expo Development Build or Google Chrome browser.'
-                : 'Make sure your ESP32 or Bluetooth device is powered on nearby before scanning.'}
-            </Text>
+            {phase === 'EXPO_GO_INFO' ? (
+              <Text style={[s.modalDesc, { color: colors.dim }]}>
+                Real BLE requires standalone app build or Chrome browser.
+              </Text>
+            ) : phase === 'NOT_FOUND' ? (
+              <Text style={[s.modalDesc, { color: colors.dim }]}>
+                Ensure ESP32 is powered on nearby.
+              </Text>
+            ) : null}
 
             {/* Error Banner */}
             {errorMsg && (

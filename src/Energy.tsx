@@ -62,7 +62,6 @@ export default function Energy() {
     >
       <Header
         title="Energy"
-        sub="Power tracking & electricity bill estimate"
         colors={colors}
         badgeIcon="⚡"
         badgeColor="#38BDF8"
@@ -97,7 +96,7 @@ export default function Energy() {
           ₹ {stats.totalCost.toFixed(2)}
         </Text>
         <Text style={[s.heroSub, { color: colors.dim }]}>
-          {stats.totalKWh.toFixed(3)} kWh consumed today
+          {stats.totalKWh.toFixed(3)} kWh
         </Text>
 
         {/* 2-Column Mini Stat Badges */}
@@ -237,7 +236,6 @@ export default function Energy() {
           <View style={[s.settingRow, { borderBottomColor: colors.line }]}>
             <View>
               <Text style={[s.settingTitle, { color: colors.text }]}>{h.names[1]} Wattage</Text>
-              <Text style={[s.settingSub, { color: colors.dim }]}>Power rating of bulb</Text>
             </View>
             <View style={s.stepperWrap}>
               <Press onPress={() => handleStepWattage(1, -5)} style={[s.stepBtn, { backgroundColor: colors.surface }]}>
@@ -254,7 +252,6 @@ export default function Energy() {
           <View style={[s.settingRow, { borderBottomColor: colors.line }]}>
             <View>
               <Text style={[s.settingTitle, { color: colors.text }]}>{h.names[2]} Wattage</Text>
-              <Text style={[s.settingSub, { color: colors.dim }]}>Power rating of bulb</Text>
             </View>
             <View style={s.stepperWrap}>
               <Press onPress={() => handleStepWattage(2, -5)} style={[s.stepBtn, { backgroundColor: colors.surface }]}>
@@ -271,7 +268,6 @@ export default function Energy() {
           <View style={s.settingRow}>
             <View>
               <Text style={[s.settingTitle, { color: colors.text }]}>EB Electricity Rate</Text>
-              <Text style={[s.settingSub, { color: colors.dim }]}>Cost per kWh unit in ₹</Text>
             </View>
             {!editTariff ? (
               <Press

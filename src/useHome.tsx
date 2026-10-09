@@ -1,8 +1,16 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { AppState, useColorScheme } from 'react-native';
 import Paho from 'paho-mqtt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BASE, BROKER, CHANNELS } from './config';
+import {
+  BASE,
+  BROKER,
+  CHANNELS,
+  ChannelConfig,
+  DEVICE_MODELS,
+  DeviceModel,
+  generateChannels,
+} from './config';
 import { ThemeColors, ThemeMode, darkColors, feel, lightColors, notify, tap } from './theme';
 import { addBleDataListener, addBleListener, autoReconnectBle, isBleConnected, sendBleCommand } from './bluetooth';
 import { LumoUser, addAuthListener, initAuth, signOut as authSignOut, getUserMqttPrefix } from './auth';
@@ -99,6 +107,16 @@ type Ctx = {
   scanWifi: () => void;
   extendTimer: (id: number, minutes: number) => void;
 
+  // Dynamic Hardware Model & Multi-Channel System
+  selectedModel: DeviceModel;
+  channelCount: number;
+  detectedHardwareChannels: number | null;
+  channels: ChannelConfig[];
+  deviceConnectModalOpen: boolean;
+  openDeviceConnectModal: () => void;
+  closeDeviceConnectModal: () => void;
+  setDeviceModel: (modelId: string) => Promise<void>;
+
   // New Smart Features
   scenes: CustomScene[];
   addCustomScene: (scene: Omit<CustomScene, 'id' | 'isCustom'>) => Promise<void>;
@@ -138,6 +156,8 @@ type Ctx = {
 const HomeCtx = createContext<Ctx>({} as Ctx);
 export const useHome = () => useContext(HomeCtx);
 
+const MODEL_STORAGE_KEY = 'lumo.hardware_model';
+const CHANNEL_COUNT_STORAGE_KEY = 'lumo.channel_count';
 const TIMERS_STORAGE_KEY = 'lumo.active_timers';
 const RELAYS_STORAGE_KEY = 'lumo.relay_states';
 const RELAYS_SINCE_KEY = 'lumo.relay_since';
@@ -222,8 +242,36 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<Rec<boolean>>({});
   const [timerEnd, setTimerEnd] = useState<Rec<number | null>>({});
   const [timerTotal, setTimerTotal] = useState<Rec<number>>({});
-  const [names, setNames] = useState<Rec<string>>(Object.fromEntries(CHANNELS.map((c) => [c.id, c.name])));
-  const [rooms, setRooms] = useState<Rec<string>>(Object.fromEntries(CHANNELS.map((c) => [c.id, c.room])));
+  const [selectedModel, setSelectedModel] = useState<DeviceModel>(DEVICE_MODELS[1]);
+  const [channelCount, setChannelCount] = useState<number>(2);
+  const [detectedHardwareChannels, setDetectedHardwareChannels] = useState<number | null>(null);
+  const channelCountRef = useRef<number>(2);
+  useEffect(() => {
+    channelCountRef.current = channelCount;
+  }, [channelCount]);
+  const [deviceConnectModalOpen, setDeviceConnectModalOpen] = useState<boolean>(false);
+
+  const [names, setNames] = useState<Rec<string>>(() => {
+    return Object.fromEntries(generateChannels(16).map((c) => [c.id, c.name]));
+  });
+  const [rooms, setRooms] = useState<Rec<string>>(() => {
+    return Object.fromEntries(generateChannels(16).map((c) => [c.id, c.room]));
+  });
+
+  const channels = useMemo(() => {
+    return generateChannels(channelCount, names, rooms);
+  }, [channelCount, names, rooms]);
+
+  const setDeviceModel = async (modelId: string) => {
+    const found = DEVICE_MODELS.find((m) => m.id === modelId) || DEVICE_MODELS[1];
+    setSelectedModel(found);
+    setChannelCount(found.channels);
+    try {
+      await AsyncStorage.setItem(MODEL_STORAGE_KEY, found.id);
+      await AsyncStorage.setItem(CHANNEL_COUNT_STORAGE_KEY, String(found.channels));
+    } catch {}
+  };
+
   const [haptics, setHapticsState] = useState(true);
   const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
   const [now, setNow] = useState(Date.now());
@@ -409,10 +457,29 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /* Initial load: immediately restore saved relay states & timers from phone storage (zero flicker/reset) */
+  /* Initial load: immediately restore saved relay states, timers & hardware model from phone storage */
   useEffect(() => {
     (async () => {
       try {
+        const savedModelId = await AsyncStorage.getItem(MODEL_STORAGE_KEY);
+        if (savedModelId) {
+          const found = DEVICE_MODELS.find((m) => m.id === savedModelId);
+          if (found) {
+            setSelectedModel(found);
+            setChannelCount(found.channels);
+          }
+        } else {
+          const savedCount = await AsyncStorage.getItem(CHANNEL_COUNT_STORAGE_KEY);
+          if (savedCount) {
+            const countNum = parseInt(savedCount, 10);
+            if (!isNaN(countNum) && countNum > 0) {
+              setChannelCount(countNum);
+              const found = DEVICE_MODELS.find((m) => m.channels === countNum);
+              if (found) setSelectedModel(found);
+            }
+          }
+        }
+
         const saved = await loadPersistedRelayStates();
         if (saved.on && Object.keys(saved.on).length > 0) {
           onRef.current = { ...saved.on };
@@ -454,81 +521,85 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       if (name) setBleDeviceName(name);
       if (connected) {
         setTimeout(() => {
+          sendBleCommand('IDENTIFY').catch(() => {});
           sendBleCommand('STATUS').catch(() => {});
           sendBleCommand('GET_WIFI').catch(() => {});
         }, 350);
+      } else {
+        setDetectedHardwareChannels(null);
       }
     });
 
     const unsubData = addBleDataListener((msg) => {
       if (typeof msg !== 'string') return;
-      const m1 = msg.match(/R1:([01])/);
-      if (m1) {
-        const val = m1[1] === '1';
-        onRef.current[1] = val;
-        setOn((s) => {
-          const next = { ...s, 1: val };
-          persistRelayStates(next);
-          return next;
-        });
-        setSince((s) => {
-          const next = { ...s, 1: val ? s[1] ?? Date.now() : null };
-          persistRelayStates(onRef.current, next);
-          return next;
-        });
-        if (!val) {
-          setTimerEnd((s) => ({ ...s, 1: null }));
-          setTimerTotal((s) => ({ ...s, 1: 0 }));
-          clearPersistedTimer(1);
-        }
-      }
-      const m2 = msg.match(/R2:([01])/);
-      if (m2) {
-        const val = m2[1] === '1';
-        onRef.current[2] = val;
-        setOn((s) => {
-          const next = { ...s, 2: val };
-          persistRelayStates(next);
-          return next;
-        });
-        setSince((s) => {
-          const next = { ...s, 2: val ? s[2] ?? Date.now() : null };
-          persistRelayStates(onRef.current, next);
-          return next;
-        });
-        if (!val) {
-          setTimerEnd((s) => ({ ...s, 2: null }));
-          setTimerTotal((s) => ({ ...s, 2: 0 }));
-          clearPersistedTimer(2);
+
+      // 0. Hardware self-announcement (e.g. CONFIG:CHANNELS:2 or CHANNELS:2)
+      const cfgMatch = msg.match(/(?:CONFIG:CHANNELS|CHANNELS):(\d+)/i);
+      if (cfgMatch) {
+        const count = parseInt(cfgMatch[1], 10);
+        if (!isNaN(count) && count > 0) {
+          setDetectedHardwareChannels(count);
+          setChannelCount(count);
+          channelCountRef.current = count;
+          const found = DEVICE_MODELS.find((d) => d.channels === count);
+          if (found) setSelectedModel(found);
+          AsyncStorage.setItem(CHANNEL_COUNT_STORAGE_KEY, String(count)).catch(() => {});
         }
       }
 
-      // Live timer countdown from hardware: T1:secs, T2:secs
-      const t1 = msg.match(/T1:(\d+)/);
-      if (t1) {
-        const secs = parseInt(t1[1], 10);
-        if (secs > 0) {
-          const endMs = Date.now() + secs * 1000;
-          setTimerEnd((s) => ({ ...s, 1: endMs }));
-          setTimerTotal((s) => ({ ...s, 1: Math.max(s[1] || 0, secs) }));
-          persistTimer(1, endMs, secs);
-        } else {
-          setTimerEnd((s) => ({ ...s, 1: null }));
-          clearPersistedTimer(1);
-        }
+      // Dynamic relay status parsing (e.g. R1:1, R2:0)
+      const rMatches = [...msg.matchAll(/R(\d+):([01])/g)];
+      if (rMatches.length > 0) {
+        const reportedIds = rMatches.map((m) => parseInt(m[1], 10));
+        const maxReportedId = Math.max(...reportedIds);
+        // The physical ESP32 board broadcasts all its active channels in getStatusString()
+        const hwCount = Math.max(maxReportedId, rMatches.length);
+        setDetectedHardwareChannels(hwCount);
+
+        // Auto-detect and sync model to the physical board
+        setChannelCount(hwCount);
+        channelCountRef.current = hwCount;
+        const found = DEVICE_MODELS.find((d) => d.channels === hwCount);
+        if (found) setSelectedModel(found);
+        AsyncStorage.setItem(CHANNEL_COUNT_STORAGE_KEY, String(hwCount)).catch(() => {});
+        rMatches.forEach((m) => {
+          const id = parseInt(m[1], 10);
+          const val = m[2] === '1';
+          onRef.current[id] = val;
+          setOn((s) => {
+            const next = { ...s, [id]: val };
+            persistRelayStates(next);
+            return next;
+          });
+          setSince((s) => {
+            const next = { ...s, [id]: val ? s[id] ?? Date.now() : null };
+            persistRelayStates(onRef.current, next);
+            return next;
+          });
+          if (!val) {
+            setTimerEnd((s) => ({ ...s, [id]: null }));
+            setTimerTotal((s) => ({ ...s, [id]: 0 }));
+            clearPersistedTimer(id);
+          }
+        });
       }
-      const t2 = msg.match(/T2:(\d+)/);
-      if (t2) {
-        const secs = parseInt(t2[1], 10);
-        if (secs > 0) {
-          const endMs = Date.now() + secs * 1000;
-          setTimerEnd((s) => ({ ...s, 2: endMs }));
-          setTimerTotal((s) => ({ ...s, 2: Math.max(s[2] || 0, secs) }));
-          persistTimer(2, endMs, secs);
-        } else {
-          setTimerEnd((s) => ({ ...s, 2: null }));
-          clearPersistedTimer(2);
-        }
+
+      // Dynamic hardware countdown timers (e.g. T1:secs, T2:secs ... T16:secs)
+      const tMatches = [...msg.matchAll(/T(\d+):(\d+)/g)];
+      if (tMatches.length > 0) {
+        tMatches.forEach((tm) => {
+          const id = parseInt(tm[1], 10);
+          const secs = parseInt(tm[2], 10);
+          if (secs > 0) {
+            const endMs = Date.now() + secs * 1000;
+            setTimerEnd((s) => ({ ...s, [id]: endMs }));
+            setTimerTotal((s) => ({ ...s, [id]: Math.max(s[id] || 0, secs) }));
+            persistTimer(id, endMs, secs);
+          } else {
+            setTimerEnd((s) => ({ ...s, [id]: null }));
+            clearPersistedTimer(id);
+          }
+        });
       }
 
       // Wi-Fi provisioning state parsing from ESP32
@@ -737,7 +808,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const tm = topic.match(/relay(\d)\/timer$/);
+      const tm = topic.match(/relay(\d+)\/timer$/);
       if (tm) {
         const id = Number(tm[1]);
         const secs = parseInt(body, 10) || 0;
@@ -746,7 +817,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const sm = topic.match(/relay(\d)\/state$/);
+      const sm = topic.match(/relay(\d+)\/state$/);
       if (!sm) return;
       const id = Number(sm[1]);
       const val = body === 'ON';
@@ -874,7 +945,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const allSet = (v: boolean) => {
-    CHANNELS.forEach((ch) => send(ch.id, v));
+    channels.forEach((ch) => send(ch.id, v));
   };
 
   const startTimer = (id: number, minutes: number) => {
@@ -933,7 +1004,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
 
         setEnergyHistory((prev) => {
           const dayData = { ...(prev[todayKey] || {}) };
-          CHANNELS.forEach((ch) => {
+          channels.forEach((ch) => {
             if (onRef.current[ch.id]) {
               dayData[ch.id] = (dayData[ch.id] || 0) + 10;
               updated = true;
@@ -948,7 +1019,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
         // Check Night Guard
         if (nightGuard.enabled) {
           const maxMs = nightGuard.maxHours * 3600 * 1000;
-          CHANNELS.forEach((ch) => {
+          channels.forEach((ch) => {
             if (onRef.current[ch.id] && since[ch.id]) {
               const elapsed = currentNow - since[ch.id]!;
               if (elapsed > maxMs) {
@@ -995,7 +1066,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [nightGuard, since, schedules]);
+  }, [nightGuard, since, schedules, channels]);
 
   const addCustomScene = async (newScene: Omit<CustomScene, 'id' | 'isCustom'>) => {
     const id = `scene_${Date.now()}`;
@@ -1014,11 +1085,18 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const activateScene = (scene: CustomScene) => {
+    if (scene.id === 'all_off') {
+      channels.forEach((ch) => send(ch.id, false));
+      return;
+    }
+    if (scene.id === 'full_light') {
+      channels.forEach((ch) => send(ch.id, true));
+      return;
+    }
     if (scene.r1 !== undefined) send(1, scene.r1);
     if (scene.r2 !== undefined) send(2, scene.r2);
     if (scene.timerMinutes && scene.timerMinutes > 0) {
-      startTimer(1, scene.timerMinutes);
-      startTimer(2, scene.timerMinutes);
+      channels.forEach((ch) => startTimer(ch.id, scene.timerMinutes!));
     }
   };
 
@@ -1066,7 +1144,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     let totalKWh = 0;
     const channelStats: Record<number, { seconds: number; kWh: number; cost: number }> = {};
 
-    CHANNELS.forEach((ch) => {
+    channels.forEach((ch) => {
       let sec = dayData[ch.id] || 0;
       if (on[ch.id] && since[ch.id]) {
         sec += Math.floor((now - since[ch.id]!) / 1000);
@@ -1097,7 +1175,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       let daySec = 0;
       let dayKWh = 0;
 
-      CHANNELS.forEach((ch) => {
+      channels.forEach((ch) => {
         let sec = dayData[ch.id] || 0;
         if (i === 0 && on[ch.id] && since[ch.id]) {
           sec += Math.floor((now - since[ch.id]!) / 1000);
@@ -1208,9 +1286,7 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
       send(id, nextVal);
     },
     send,
-    allSet: (v) => {
-      CHANNELS.forEach((ch) => send(ch.id, v));
-    },
+    allSet,
     startTimer,
     extendTimer,
     cancelTimer: (id) => {
@@ -1233,6 +1309,16 @@ export function HomeProvider({ children }: { children: React.ReactNode }) {
     clearWifi,
     refreshWifi,
     scanWifi,
+
+    // Dynamic Hardware Model & Multi-Channel System
+    selectedModel,
+    channelCount,
+    detectedHardwareChannels,
+    channels,
+    deviceConnectModalOpen,
+    openDeviceConnectModal: () => setDeviceConnectModalOpen(true),
+    closeDeviceConnectModal: () => setDeviceConnectModalOpen(false),
+    setDeviceModel,
 
     // Smart Features
     scenes,

@@ -171,9 +171,6 @@ export default function AuthModal({ visible, onClose, canDismiss = true }: AuthM
                 <Ionicons name="shield-checkmark-outline" size={26} color={colors.lamp} />
               </View>
               <Text style={[s.title, { color: colors.text }]}>Lumo Account</Text>
-              <Text style={[s.subtitle, { color: colors.dim }]}>
-                Secure your home switches with an encrypted private household account.
-              </Text>
             </View>
 
             {/* Tab Switcher */}

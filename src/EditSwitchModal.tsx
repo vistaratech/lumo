@@ -43,7 +43,7 @@ export default function EditSwitchModal({ visible, channelId, onClose }: EditSwi
   const isDark = h.isDark;
   const insets = useSafeAreaInsets();
 
-  const channel = CHANNELS.find((c) => c.id === channelId) || CHANNELS[0];
+  const channel = h.channels.find((c) => c.id === channelId) || h.channels[0];
   const accentColor = isDark ? channel.color : channel.colorLight;
 
   const [name, setName] = useState('');
@@ -100,9 +100,6 @@ export default function EditSwitchModal({ visible, channelId, onClose }: EditSwi
                 </View>
                 <View>
                   <Text style={[s.title, { color: colors.text }]}>Edit Switch & Room</Text>
-                  <Text style={[s.subtitle, { color: colors.dim }]}>
-                    Switch {channelId} • Relay Channel {channelId}
-                  </Text>
                 </View>
               </View>
 

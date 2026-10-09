@@ -170,9 +170,6 @@ export default function WifiModal({
               </View>
               <View>
                 <Text style={[s.title, { color: colors.text }]}>Device Wi-Fi Setup</Text>
-                <Text style={[s.sub, { color: colors.dim }]}>
-                  {h.bleActive ? 'ESP32 Connected via Bluetooth' : 'Connect ESP32 for Remote Access'}
-                </Text>
               </View>
             </View>
 
@@ -201,34 +198,9 @@ export default function WifiModal({
                   </View>
                 </View>
 
-                <Text style={[s.heroTitle, { color: colors.text }]}>
+                <Text style={[s.heroTitle, { color: colors.text, marginBottom: 16 }]}>
                   Bluetooth Link Required
                 </Text>
-                <Text style={[s.heroSubtitle, { color: colors.dim }]}>
-                  To detect nearby 2.4 GHz Wi-Fi and configure your ESP32 router credentials, connect via Bluetooth first.
-                </Text>
-
-                {/* Value Checklist */}
-                <View style={s.featureList}>
-                  <View style={s.featureRow}>
-                    <Ionicons name="flash" size={14} color="#06D6A0" />
-                    <Text style={[s.featureText, { color: colors.text }]}>
-                      Fast Auto-Scan for 2.4 GHz Networks
-                    </Text>
-                  </View>
-                  <View style={s.featureRow}>
-                    <Ionicons name="shield-checkmark" size={14} color="#0084FF" />
-                    <Text style={[s.featureText, { color: colors.text }]}>
-                      Encrypted Password Stored in ESP32 Flash
-                    </Text>
-                  </View>
-                  <View style={s.featureRow}>
-                    <Ionicons name="globe" size={14} color="#8B5CF6" />
-                    <Text style={[s.featureText, { color: colors.text }]}>
-                      Worldwide Control from Mobile SIM (4G/5G)
-                    </Text>
-                  </View>
-                </View>
 
                 {/* Primary Action Button */}
                 <Press
@@ -242,7 +214,7 @@ export default function WifiModal({
                   style={s.connectBleBtn}
                 >
                   <Ionicons name="bluetooth" size={18} color="#FFFFFF" />
-                  <Text style={s.connectBleBtnText}>Connect Bluetooth Now</Text>
+                  <Text style={s.connectBleBtnText}>Connect Bluetooth</Text>
                   <Ionicons name="arrow-forward" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
                 </Press>
               </View>
@@ -314,13 +286,11 @@ export default function WifiModal({
                         ? 'Connecting to Wi-Fi Router…'
                         : 'Wi-Fi Not Connected'}
                     </Text>
-                    <Text style={[s.statusBannerSub, { color: colors.dim }]}>
-                      {h.wifiStatus === 'connected'
-                        ? `IP: ${h.wifiIp || 'Assigned'} • Remote Cloud Control Active`
-                        : h.wifiStatus === 'connecting'
-                        ? 'Verifying credentials with ESP32...'
-                        : 'Select your home network below to connect'}
-                    </Text>
+                    {h.wifiStatus === 'connected' && h.wifiIp ? (
+                      <Text style={[s.statusBannerSub, { color: colors.dim }]}>
+                        IP: {h.wifiIp}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
 
@@ -373,7 +343,7 @@ export default function WifiModal({
                   <View style={[s.scanningPlaceholder, { backgroundColor: isDark ? '#141C2B' : '#F8FAFC' }]}>
                     <ActivityIndicator size="small" color="#0084FF" />
                     <Text style={[s.scanningPlaceholderText, { color: colors.dim }]}>
-                      ESP32 is scanning nearby 2.4 GHz channels…
+                      Scanning nearby networks…
                     </Text>
                   </View>
                 )}
@@ -458,9 +428,7 @@ export default function WifiModal({
                     <Text style={[s.emptyBoxText, { color: colors.text }]}>
                       No networks detected yet
                     </Text>
-                    <Text style={[s.emptyBoxSub, { color: colors.dim }]}>
-                      Tap here to scan nearby 2.4 GHz Wi-Fi routers
-                    </Text>
+
                   </Press>
                 ) : null}
 
@@ -478,7 +446,7 @@ export default function WifiModal({
                     color="#0084FF"
                   />
                   <Text style={s.manualLinkText}>
-                    {manualEntry ? 'Hide manual name entry' : 'Or enter hidden network name manually'}
+                    {manualEntry ? 'Hide manual entry' : 'Manual Network Entry'}
                   </Text>
                 </Press>
               </View>
@@ -553,13 +521,7 @@ export default function WifiModal({
                 </Animated.View>
               )}
 
-              {/* Minimal Clean Helper Tip */}
-              <View style={s.helperBanner}>
-                <Ionicons name="information-circle-outline" size={15} color="#0084FF" />
-                <Text style={s.helperText}>
-                  ESP32 supports 2.4 GHz Wi-Fi. Once paired, you can control switches from anywhere in the world using phone SIM net!
-                </Text>
-              </View>
+
 
               {/* Action Button */}
               <View style={s.buttonContainer}>
