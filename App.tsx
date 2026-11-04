@@ -170,7 +170,7 @@ function Shell() {
         key={tab}
         entering={Enter.duration(300)}
         exiting={FadeOut.duration(140)}
-        style={[StyleSheet.absoluteFill, { top: insets.top }]}
+        style={[StyleSheet.absoluteFill, { top: insets.top, bottom: 0, overflow: 'hidden' }]}
       >
         <Screen />
       </Animated.View>
@@ -217,7 +217,7 @@ function Root() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={[s.fill, { backgroundColor: '#0B101B' }]}>
       <HomeProvider>
         <Root />
       </HomeProvider>
@@ -226,7 +226,11 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  fill: { flex: 1 },
+  fill: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   orbA: { position: 'absolute', top: -170, right: -190 },
   orbB: { position: 'absolute', bottom: -160, left: -170 },
   bar: {

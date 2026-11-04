@@ -359,7 +359,7 @@ export default function Timers() {
   const [addScheduleOpen, setAddScheduleOpen] = useState(false);
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
       <Header
         title="Timers"
         colors={colors}

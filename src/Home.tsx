@@ -394,8 +394,12 @@ export default function Home() {
   const [editSwitchChannelId, setEditSwitchChannelId] = useState<number | null>(null);
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 150 }}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Top Header Bar */}
       <Animated.View entering={FadeInDown.duration(450)} style={s.top}>
         <View style={s.topHeaderRow}>
