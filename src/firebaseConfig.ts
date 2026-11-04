@@ -6,12 +6,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyA4_62wm9ixpYOJnQGdtl1VnklFrmhTgss",
-  authDomain: "lumo-ind.firebaseapp.com",
-  projectId: "lumo-ind",
-  storageBucket: "lumo-ind.firebasestorage.app",
-  messagingSenderId: "1087681119264",
-  appId: "1:1087681119264:ios:b5177ffe375ab76470e845",
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyA4_62wm9ixpYOJnQGdtl1VnklFrmhTgss',
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'lumo-ind.firebaseapp.com',
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'lumo-ind',
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'lumo-ind.firebasestorage.app',
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '1087681119264',
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:1087681119264:ios:b5177ffe375ab76470e845',
 };
 
 // Initialize Firebase App

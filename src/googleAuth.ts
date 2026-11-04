@@ -13,9 +13,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 WebBrowser.maybeCompleteAuthSession();
 
 export const GOOGLE_CONFIG = {
-  iosClientId: '1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1.apps.googleusercontent.com',
-  webClientId: '1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1.apps.googleusercontent.com',
-  reversedClientId: 'com.googleusercontent.apps.1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1',
+  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1.apps.googleusercontent.com',
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1.apps.googleusercontent.com',
+  reversedClientId: process.env.EXPO_PUBLIC_GOOGLE_REVERSED_CLIENT_ID || 'com.googleusercontent.apps.1087681119264-ul56sv4ue86edpr5vfkqkd4dlsbjl3j1',
 };
 
 const STORAGE_KEY_USER = 'lumo.auth.user';

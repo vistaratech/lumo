@@ -1,12 +1,13 @@
 // Cloud MQTT Broker for worldwide SIM / Wi-Fi remote access
+// Values come from .env (EXPO_PUBLIC_MQTT_*). See .env.example.
 export const BROKER = {
-  host: 'broker.emqx.io',
-  port: 8084, // Secure WebSocket port (WSS / TLS)
-  user: '',   // Empty for public cluster, or set your HiveMQ user
-  pass: '',   // Empty for public cluster, or set your HiveMQ pass
+  host: process.env.EXPO_PUBLIC_MQTT_HOST || 'broker.emqx.io',
+  port: Number(process.env.EXPO_PUBLIC_MQTT_PORT) || 8084, // Secure WebSocket port (WSS / TLS)
+  user: process.env.EXPO_PUBLIC_MQTT_USER || '',   // Empty for public cluster, or set your HiveMQ user
+  pass: process.env.EXPO_PUBLIC_MQTT_PASS || '',   // Empty for public cluster, or set your HiveMQ pass
 };
 
-export const BASE = 'home/esp32';
+export const BASE = process.env.EXPO_PUBLIC_MQTT_BASE || 'home/esp32';
 
 export interface DeviceModel {
   id: string;

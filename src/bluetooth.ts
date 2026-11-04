@@ -186,8 +186,10 @@ function fromBase64(b64: string): string {
   }
 }
 
-export const LUMO_SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-export const LUMO_CHAR_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+export const LUMO_SERVICE_UUID = process.env.EXPO_PUBLIC_BLE_SERVICE_UUID || '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+export const LUMO_CHAR_UUID = process.env.EXPO_PUBLIC_BLE_CHAR_UUID || 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+export const LUMO_DEVICE_NAME = process.env.EXPO_PUBLIC_BLE_DEVICE_NAME || 'Lumo-ESP32';
+export const LUMO_FALLBACK_UUID = process.env.EXPO_PUBLIC_BLE_FALLBACK_UUID || '0000ffe0-0000-1000-8000-00805f9b34fb';
 
 let activeChar: any = null;
 let activeDevice: any = null;
@@ -483,7 +485,7 @@ export async function requestBluetoothDevice(): Promise<BluetoothDeviceInfo> {
         'battery_service',
         'device_information',
         LUMO_SERVICE_UUID,
-        '0000ffe0-0000-1000-8000-00805f9b34fb',
+        LUMO_FALLBACK_UUID,
       ],
     });
 
