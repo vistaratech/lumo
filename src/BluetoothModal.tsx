@@ -241,27 +241,28 @@ export default function BluetoothModal({
         style={[
           s.backdrop,
           {
-            justifyContent: isDesktop ? 'center' : 'flex-end',
+            justifyContent: 'center',
             alignItems: 'center',
-            padding: isDesktop ? 20 : 0,
+            padding: 16,
           },
         ]}
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
         <Animated.View
-          entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
+          entering={FadeIn.duration(200)}
           exiting={FadeOut.duration(150)}
           style={[
             s.dialog,
             {
               backgroundColor: isDark ? '#121726' : '#FFFFFF',
               borderColor: isDark ? '#1E273A' : '#E2E8F0',
-              borderRadius: isDesktop ? 28 : 0,
-              borderTopLeftRadius: 28,
-              borderTopRightRadius: 28,
-              maxHeight: height * 0.88,
-              paddingBottom: isDesktop ? 24 : Math.max(insets.bottom, 16) + 12,
+              borderRadius: 28,
+              borderWidth: 1.5,
+              maxHeight: Math.min(height * 0.88, 620),
+              width: '100%',
+              maxWidth: 480,
+              paddingBottom: 20,
             },
           ]}
         >
@@ -554,17 +555,30 @@ export default function BluetoothModal({
 const s = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    ...(Platform.OS === 'web'
+      ? {
+          position: 'fixed' as any,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          zIndex: 99999,
+        }
+      : {}),
   },
   dialog: {
     width: '100%',
-    maxWidth: 420,
-    borderWidth: 1,
-    paddingTop: 10,
+    maxWidth: 480,
+    borderWidth: 1.5,
+    paddingTop: 16,
     paddingHorizontal: 22,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 8 },
     shadowRadius: 28,
     elevation: 24,
   },

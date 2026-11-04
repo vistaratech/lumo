@@ -424,9 +424,9 @@ export default function DeviceConnectModal({
         style={[
           s.backdrop,
           {
-            justifyContent: isDesktop ? 'center' : 'flex-end',
+            justifyContent: 'center',
             alignItems: 'center',
-            padding: isDesktop ? 20 : 0,
+            padding: 16,
           },
         ]}
       >
@@ -435,19 +435,19 @@ export default function DeviceConnectModal({
 
         {/* ── Modern Liquid Glass Dialog Container ── */}
         <Animated.View
-          entering={FadeInDown.duration(280).easing(Easing.out(Easing.cubic))}
-          exiting={FadeOut.duration(160)}
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(150)}
           style={[
             s.dialog,
             {
-              backgroundColor: isDark ? 'rgba(15, 23, 42, 0.84)' : 'rgba(255, 255, 255, 0.88)',
+              backgroundColor: isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.96)',
               borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.95)',
-              borderRadius: isDesktop ? 32 : 0,
-              borderTopLeftRadius: 32,
-              borderTopRightRadius: 32,
-              maxHeight: height * 0.9,
-              width: isDesktop ? 520 : '100%',
-              paddingBottom: isDesktop ? 24 : Math.max(insets.bottom, 16) + 8,
+              borderRadius: 28,
+              borderWidth: 1.5,
+              maxHeight: Math.min(height * 0.88, 640),
+              width: '100%',
+              maxWidth: 480,
+              paddingBottom: 20,
               ...(Platform.OS === 'web'
                 ? {
                     backdropFilter: 'blur(36px) saturate(200%)',
@@ -475,16 +475,6 @@ export default function DeviceConnectModal({
               { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.9)' },
             ]}
           />
-
-          {/* Top Sheet Handle (Mobile) */}
-          {!isDesktop && (
-            <View
-              style={[
-                s.handle,
-                { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.18)' },
-              ]}
-            />
-          )}
 
           {/* ── Fixed Liquid Glass Header ── */}
           <View
@@ -944,24 +934,35 @@ export default function DeviceConnectModal({
                         ))}
                       </View>
                     ) : (
-                      <Press
-                        onPress={startScan}
-                        disabled={isScanning || isConnecting}
-                        style={[
-                          s.scanTriggerBtn,
-                          {
-                            backgroundColor: isDark
-                              ? 'rgba(0, 132, 255, 0.1)'
-                              : 'rgba(0, 132, 255, 0.08)',
-                            borderColor: '#0084FF',
-                          },
-                        ]}
-                      >
-                        <Ionicons name="search" size={16} color="#0084FF" />
-                        <Text style={[s.scanTriggerBtnText, { color: '#0084FF' }]}>
-                          {isScanning ? 'Searching Controllers…' : 'Scan for Hardware Board'}
+                      <View style={{ width: '100%', alignItems: 'center', marginTop: 10 }}>
+                        <Press
+                          onPress={startScan}
+                          disabled={isScanning || isConnecting}
+                          style={[
+                            s.scanTriggerBtn,
+                            {
+                              backgroundColor: '#0084FF',
+                              borderColor: '#0084FF',
+                              width: '100%',
+                              justifyContent: 'center',
+                              paddingVertical: 14,
+                              borderRadius: 16,
+                              shadowColor: '#0084FF',
+                              shadowOpacity: 0.35,
+                              shadowRadius: 10,
+                              elevation: 4,
+                            },
+                          ]}
+                        >
+                          <Ionicons name={isScanning ? 'sync' : 'bluetooth'} size={19} color="#FFF" />
+                          <Text style={[s.scanTriggerBtnText, { color: '#FFF', fontSize: 15, fontWeight: '700' }]}>
+                            {isScanning ? 'Searching ESP32 Relays…' : 'Scan & Connect Bluetooth'}
+                          </Text>
+                        </Press>
+                        <Text style={{ fontSize: 12, color: colors.dim, textAlign: 'center', marginTop: 8 }}>
+                          Make sure your ESP32 board is turned on and nearby
                         </Text>
-                      </Press>
+                      </View>
                     )}
 
                     {/* Manual Override Fallback Button */}
@@ -1577,20 +1578,30 @@ export default function DeviceConnectModal({
 const s = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    ...(Platform.OS === 'web'
+      ? {
+          position: 'fixed' as any,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          zIndex: 99999,
+        }
+      : {}),
   },
   dialog: {
     width: '100%',
-    maxWidth: 520,
-    borderTopWidth: 1.5,
-    borderLeftWidth: 1.5,
-    borderRightWidth: 1.5,
+    maxWidth: 480,
+    borderWidth: 1.5,
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 16,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: -6 },
+    shadowOffset: { width: 0, height: 8 },
     shadowRadius: 28,
     elevation: 24,
     flexDirection: 'column',

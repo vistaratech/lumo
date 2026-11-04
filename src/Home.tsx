@@ -394,7 +394,8 @@ export default function Home() {
   const [editSwitchChannelId, setEditSwitchChannelId] = useState<number | null>(null);
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 150 }} showsVerticalScrollIndicator={false}>
       {/* Top Header Bar */}
       <Animated.View entering={FadeInDown.duration(450)} style={s.top}>
         <View style={s.topHeaderRow}>
@@ -651,51 +652,52 @@ export default function Home() {
           />
         ))}
       </View>
-
-      {/* 4-Step Hardware Device Connect & Test Wizard */}
-      <DeviceConnectModal
-        visible={deviceModalOpen || h.deviceConnectModalOpen}
-        onClose={() => {
-          setDeviceModalOpen(false);
-          h.closeDeviceConnectModal();
-        }}
-        onOpenWifi={() => setWifiModalOpen(true)}
-      />
-
-      {/* Voice Assistant Modal */}
-      <VoiceModal
-        visible={voiceModalOpen}
-        onClose={() => setVoiceModalOpen(false)}
-      />
-
-      {/* Add Custom Scene Modal */}
-      <AddSceneModal
-        visible={addSceneOpen}
-        onClose={() => setAddSceneOpen(false)}
-      />
-
-      {/* Bluetooth Discovery & Pairing Modal */}
-      <BluetoothModal
-        visible={bleModalOpen}
-        onClose={() => setBleModalOpen(false)}
-        onOpenWifi={() => setWifiModalOpen(true)}
-      />
-
-      {/* Device Wi-Fi Provisioning Modal */}
-      <WifiModal
-        visible={wifiModalOpen}
-        onClose={() => setWifiModalOpen(false)}
-        onOpenBluetooth={() => setBleModalOpen(true)}
-      />
-
-      {/* Quick Edit Switch & Room Modal */}
-      <EditSwitchModal
-        visible={editSwitchChannelId !== null}
-        channelId={editSwitchChannelId}
-        onClose={() => setEditSwitchChannelId(null)}
-      />
     </ScrollView>
-  );
+
+    {/* 4-Step Hardware Device Connect & Test Wizard */}
+    <DeviceConnectModal
+      visible={deviceModalOpen || h.deviceConnectModalOpen}
+      onClose={() => {
+        setDeviceModalOpen(false);
+        h.closeDeviceConnectModal();
+      }}
+      onOpenWifi={() => setWifiModalOpen(true)}
+    />
+
+    {/* Voice Assistant Modal */}
+    <VoiceModal
+      visible={voiceModalOpen}
+      onClose={() => setVoiceModalOpen(false)}
+    />
+
+    {/* Add Custom Scene Modal */}
+    <AddSceneModal
+      visible={addSceneOpen}
+      onClose={() => setAddSceneOpen(false)}
+    />
+
+    {/* Bluetooth Discovery & Pairing Modal */}
+    <BluetoothModal
+      visible={bleModalOpen}
+      onClose={() => setBleModalOpen(false)}
+      onOpenWifi={() => setWifiModalOpen(true)}
+    />
+
+    {/* Device Wi-Fi Provisioning Modal */}
+    <WifiModal
+      visible={wifiModalOpen}
+      onClose={() => setWifiModalOpen(false)}
+      onOpenBluetooth={() => setBleModalOpen(true)}
+    />
+
+    {/* Quick Edit Switch & Room Modal */}
+    <EditSwitchModal
+      visible={editSwitchChannelId !== null}
+      channelId={editSwitchChannelId}
+      onClose={() => setEditSwitchChannelId(null)}
+    />
+  </View>
+);
 }
 
 const s = StyleSheet.create({
